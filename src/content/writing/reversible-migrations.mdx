@@ -1,0 +1,31 @@
+---
+title: "Write migrations you can walk back"
+description: "Forward-only is a strategy for systems you fully understand. Most of the time, you do not — so build the road back before you drive down it."
+date: 2024-10-14
+tag: "engineering"
+readingTime: "5 min"
+---
+
+There's a quiet confidence in a forward-only migration. It says: I know exactly what this
+change does and I will never need to undo it. Occasionally that's true. Usually it's a bet
+you're making without noticing.
+
+## The road back
+
+My rule of thumb: write every schema change so it can be reverted without calling a meeting.
+Not because you'll always revert, but because the discipline of designing the reverse path
+surfaces the risk you were about to take.
+
+If you can't cleanly reverse a change, that's not a reason to skip the reverse — it's a signal
+the change is bigger than it looked.
+
+## Expand, migrate, contract
+
+The pattern that makes this practical is boring and old:
+
+1. **Expand** — add the new shape alongside the old.
+2. **Migrate** — move reads and writes over, gradually.
+3. **Contract** — remove the old shape once nothing depends on it.
+
+Each step is independently reversible. You're never more than one small, understood move away
+from where you just were. That's what makes moving fast actually safe.

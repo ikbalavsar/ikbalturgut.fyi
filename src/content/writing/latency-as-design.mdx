@@ -1,0 +1,32 @@
+---
+title: "Latency budgets are a design tool"
+description: "Deciding where your milliseconds go is not just an operations concern. It is one of the earliest and most consequential design decisions you can make."
+date: 2024-11-27
+tag: "product craft"
+readingTime: "7 min"
+---
+
+Latency usually shows up late — as a graph, an alert, a postmortem. By then it's a constraint
+you're fighting. But if you decide early where your time budget goes, latency becomes
+something you design with rather than around.
+
+## A budget, spent on purpose
+
+Say you have 200 milliseconds before an interaction feels sluggish. That's a budget. You can
+spend it on a round trip, on rendering, on an animation that makes a wait feel intentional —
+but you can only spend it once.
+
+Naming that budget out loud, early, forces the important questions to the front:
+
+- What has to be instant, and what can be optimistic?
+- Where can we show something true before we show everything?
+- Which waits should be hidden, and which should be honest?
+
+## Time shapes interface
+
+When you treat the budget as fixed, the interface starts to design itself. Optimistic updates,
+skeleton states, streamed results, and progressive disclosure stop being tricks and become
+consequences of a decision you already made.
+
+The teams that ship the most responsive-feeling software aren't necessarily the fastest. They
+decided, up front, what fast was going to mean.

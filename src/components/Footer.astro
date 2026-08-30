@@ -1,0 +1,120 @@
+---
+import { site } from "@/config"
+const year = new Date().getFullYear()
+---
+
+<footer class="footer">
+  <div class="shell footer-inner">
+    <div class="footer-sig">
+      <span class="font-serif sig">{site.name}</span>
+      <span class="mono-label avail">{site.availability}</span>
+    </div>
+
+    <div class="footer-cols">
+      <div class="footer-col">
+        <span class="index-num">01 / Contact</span>
+        <a class="footer-link" href={`mailto:${site.email}`}>{site.email}</a>
+      </div>
+      <div class="footer-col">
+        <span class="index-num">02 / Elsewhere</span>
+        <a class="footer-link" href={site.social.github} target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="footer-link" href={site.social.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+      <div class="footer-col">
+        <span class="index-num">03 / Follow</span>
+        <a class="footer-link" href="/rss.xml">RSS feed</a>
+        <a class="footer-link" href="/writing">Writing archive</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell footer-base">
+    <span class="mono-label">{`© ${year} ${site.domain}`}</span>
+    <span class="mono-label">Built static · Astro · TypeScript</span>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    border-top: var(--rule-strong);
+    padding-top: clamp(3rem, 6vw, 5rem);
+    padding-bottom: 2rem;
+  }
+  .footer-inner {
+    display: grid;
+    grid-template-columns: 1.2fr 2fr;
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: start;
+  }
+  .footer-sig {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .sig {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  .avail {
+    max-width: 24ch;
+    line-height: 1.6;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    font-size: 0.75rem;
+  }
+
+  .footer-cols {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(1.5rem, 3vw, 2.5rem);
+  }
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .footer-link {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--ink-70);
+    width: fit-content;
+    background-image: linear-gradient(var(--ink), var(--ink));
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    padding-bottom: 2px;
+    transition: color 0.2s ease, background-size 0.3s ease;
+  }
+  .footer-link:hover {
+    color: var(--ink);
+    background-size: 100% 1px;
+  }
+
+  .footer-base {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-top: clamp(3rem, 6vw, 5rem);
+    padding-top: 1.25rem;
+    border-top: var(--rule);
+  }
+
+  @media (max-width: 860px) {
+    .footer-inner {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+  }
+  @media (max-width: 560px) {
+    .footer-cols {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+    .footer-base {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

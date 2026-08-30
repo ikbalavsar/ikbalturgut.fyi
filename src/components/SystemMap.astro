@@ -1,0 +1,135 @@
+---
+// Abstract system map: nodes, edges, dots and small labels.
+// Not a chart or dashboard — a loose diagram of how software connects.
+---
+
+<figure class="sysmap" aria-hidden="true">
+  <svg viewBox="0 0 520 460" role="presentation" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
+        <path d="M26 0H0V26" fill="none" stroke="var(--ink)" stroke-width="0.4" opacity="0.06" />
+      </pattern>
+    </defs>
+
+    <rect x="0.5" y="0.5" width="519" height="459" fill="url(#grid)" stroke="var(--ink)" stroke-opacity="0.14" stroke-width="1" />
+
+    <!-- corner ticks -->
+    <g stroke="var(--ink)" stroke-width="1" opacity="0.5">
+      <path d="M10 0 V10 H0" fill="none" transform="translate(0,0)" />
+    </g>
+
+    <!-- Edges -->
+    <g class="edges" stroke="var(--ink)" stroke-width="1" fill="none" stroke-opacity="0.4">
+      <path class="edge" d="M96 108 C 180 108, 190 210, 262 214" />
+      <path class="edge" d="M262 214 C 340 218, 360 128, 430 122" />
+      <path class="edge" d="M262 214 C 210 300, 150 320, 108 356" />
+      <path class="edge" d="M262 214 C 350 300, 380 330, 418 350" />
+      <path class="edge" d="M96 108 C 70 190, 82 280, 108 356" />
+      <path class="edge" d="M430 122 C 470 200, 460 290, 418 350" />
+    </g>
+
+    <!-- Accent edge (cobalt) -->
+    <path class="edge-accent" d="M96 108 C 180 108, 190 210, 262 214" stroke="var(--cobalt)" stroke-width="1.4" fill="none" />
+
+    <!-- Traveling pulse -->
+    <circle class="pulse" r="3.2" fill="var(--cobalt)">
+      <animateMotion class="pulse-motion" dur="6s" repeatCount="indefinite" rotate="auto"
+        path="M96 108 C 180 108, 190 210, 262 214 C 340 218, 360 128, 430 122" />
+    </circle>
+
+    <!-- Nodes -->
+    <g class="nodes">
+      <g class="node" transform="translate(96,108)">
+        <circle r="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.4" />
+        <circle class="node-dot" r="2.4" fill="var(--ink)" />
+      </g>
+      <g class="node" transform="translate(262,214)">
+        <rect x="-8" y="-8" width="16" height="16" fill="var(--lime)" stroke="var(--ink)" stroke-width="1.4" />
+      </g>
+      <g class="node" transform="translate(430,122)">
+        <circle r="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.4" />
+        <circle class="node-dot" r="2.4" fill="var(--ink)" />
+      </g>
+      <g class="node" transform="translate(108,356)">
+        <circle r="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.4" />
+        <circle class="node-dot" r="2.4" fill="var(--ink)" />
+      </g>
+      <g class="node" transform="translate(418,350)">
+        <circle r="7" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.4" />
+        <circle class="node-dot" r="2.4" fill="var(--ink)" />
+      </g>
+    </g>
+
+    <!-- Scatter dots -->
+    <g fill="var(--ink)" opacity="0.28">
+      <circle cx="196" cy="70" r="1.6" />
+      <circle cx="356" cy="256" r="1.6" />
+      <circle cx="168" cy="256" r="1.6" />
+      <circle cx="300" cy="392" r="1.6" />
+      <circle cx="470" cy="70" r="1.6" />
+    </g>
+
+    <!-- Labels -->
+    <g class="labels" font-family="var(--font-mono)" font-size="8.5" letter-spacing="0.12em" fill="var(--ink)" fill-opacity="0.62">
+      <text x="82" y="92" text-anchor="start">INPUT</text>
+      <text x="262" y="240" text-anchor="middle">CORE</text>
+      <text x="430" y="106" text-anchor="middle">MODEL</text>
+      <text x="108" y="382" text-anchor="middle">STORE</text>
+      <text x="418" y="376" text-anchor="middle">EDGE</text>
+    </g>
+
+    <!-- coordinate caption -->
+    <text x="12" y="450" font-family="var(--font-mono)" font-size="8" letter-spacing="0.1em" fill="var(--ink)" fill-opacity="0.4">
+      FIG.01 — SYSTEM TOPOLOGY
+    </text>
+  </svg>
+</figure>
+
+<style>
+  .sysmap {
+    width: 100%;
+    margin: 0;
+  }
+  .sysmap svg {
+    width: 100%;
+    height: auto;
+  }
+
+  .edge {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    animation: drift 20s linear infinite;
+  }
+  .edge-accent {
+    stroke-dasharray: 6 5;
+    animation: dash 3.5s linear infinite;
+  }
+  .node {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: breathe 5s ease-in-out infinite;
+  }
+  .node:nth-child(2) { animation-delay: 0.6s; }
+  .node:nth-child(3) { animation-delay: 1.2s; }
+  .node:nth-child(4) { animation-delay: 1.8s; }
+  .node:nth-child(5) { animation-delay: 2.4s; }
+
+  @keyframes dash {
+    to { stroke-dashoffset: -22; }
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+  }
+  @keyframes drift {
+    to { stroke-dashoffset: -100; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge-accent,
+    .node,
+    .edge { animation: none; }
+    .pulse-motion { display: none; }
+    .pulse { display: none; }
+  }
+</style>

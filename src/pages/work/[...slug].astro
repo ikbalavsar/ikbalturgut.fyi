@@ -1,0 +1,123 @@
+---
+import { getCollection, render } from "astro:content"
+import BaseLayout from "@/layouts/BaseLayout.astro"
+
+export async function getStaticPaths() {
+  const entries = await getCollection("work")
+  return entries.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }))
+}
+
+const { entry } = Astro.props
+const { Content } = await render(entry)
+const d = entry.data
+---
+
+<BaseLayout title={`${d.title} — Ikbal Turgut`} description={d.outcome} ogType="article">
+  <article class="case">
+    <div class="shell">
+      <a href="/#work" class="back textlink">
+        <span class="arrow">&#8592;</span> Selected work
+      </a>
+
+      <header class="case-head">
+        <div class="case-index">
+          <span class="index-num">{d.index}</span>
+          <span class="mono-label">{d.category}</span>
+        </div>
+        <h1 class="case-title font-serif">{d.title}</h1>
+        <p class="case-outcome">{d.outcome}</p>
+      </header>
+
+      <dl class="case-facts">
+        <div>
+          <dt class="mono-label">Role</dt>
+          <dd>{d.role}</dd>
+        </div>
+        <div>
+          <dt class="mono-label">Scope</dt>
+          <dd>{d.scope}</dd>
+        </div>
+        <div>
+          <dt class="mono-label">Year</dt>
+          <dd>{d.year}</dd>
+        </div>
+      </dl>
+
+      <div class="prose">
+        <Content />
+      </div>
+
+      <footer class="case-foot">
+        <span class="mono-label">Note on confidentiality</span>
+        <p>
+          Client and product names are withheld. The work described is real; the specifics
+          are generalized out of respect for the teams involved.
+        </p>
+      </footer>
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .case {
+    padding-block: clamp(2rem, 5vw, 4rem) clamp(4rem, 8vw, 7rem);
+  }
+  .back {
+    margin-bottom: clamp(2rem, 5vw, 3.5rem);
+  }
+  .case-head {
+    max-width: 20ch;
+  }
+  .case-index {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .case-title {
+    font-weight: 300;
+    font-size: clamp(2.2rem, 5.5vw, 4rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+  .case-outcome {
+    margin-top: 1.5rem;
+    max-width: 46ch;
+    font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+    line-height: 1.45;
+    color: var(--ink-70);
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .case-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.5rem;
+    margin-block: clamp(2.5rem, 5vw, 4rem);
+    padding-block: 1.5rem;
+    border-block: var(--rule);
+  }
+  .case-facts dt {
+    margin-bottom: 0.4rem;
+  }
+  .case-facts dd {
+    font-size: 0.95rem;
+    max-width: 24ch;
+  }
+  .case-foot {
+    max-width: 65ch;
+    margin-top: clamp(3rem, 6vw, 5rem);
+    padding-top: 1.5rem;
+    border-top: var(--rule);
+  }
+  .case-foot p {
+    margin-top: 0.75rem;
+    color: var(--ink-55);
+    font-size: 0.9rem;
+    max-width: 54ch;
+  }
+</style>

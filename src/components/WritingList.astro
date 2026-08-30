@@ -1,0 +1,125 @@
+---
+interface Item {
+  slug: string
+  title: string
+  description: string
+  date: Date
+  tag: string
+  readingTime?: string
+}
+
+interface Props {
+  items: Item[]
+}
+
+const { items } = Astro.props
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" })
+---
+
+<ul class="writing-list">
+  {
+    items.map((item) => (
+      <li class="writing-item">
+        <a href={`/writing/${item.slug}`} class="writing-item__link">
+          <div class="writing-item__meta">
+            <time datetime={item.date.toISOString()} class="mono-label">
+              {fmt(item.date)}
+            </time>
+            <span class="writing-item__tag">{item.tag}</span>
+          </div>
+          <div class="writing-item__main">
+            <h3 class="writing-item__title font-serif">{item.title}</h3>
+            <p class="writing-item__desc">{item.description}</p>
+          </div>
+          <div class="writing-item__aside">
+            {item.readingTime && <span class="mono-label">{item.readingTime}</span>}
+            <span class="writing-item__arrow" aria-hidden="true">&#8594;</span>
+          </div>
+        </a>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .writing-list {
+    border-top: var(--rule);
+  }
+  .writing-item {
+    border-bottom: var(--rule);
+  }
+  .writing-item__link {
+    display: grid;
+    grid-template-columns: 160px 1fr auto;
+    gap: clamp(1rem, 3vw, 2.5rem);
+    align-items: start;
+    padding: clamp(1.4rem, 2.5vw, 2rem) 0;
+    transition: background-color 0.3s ease, padding-inline 0.3s ease;
+  }
+  .writing-item__link:hover {
+    background-color: color-mix(in srgb, var(--paper-2) 70%, transparent);
+    padding-inline: clamp(0.5rem, 1.5vw, 1.25rem);
+  }
+  .writing-item__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.35rem;
+  }
+  .writing-item__tag {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    border: var(--rule);
+    padding: 2px 8px;
+    width: fit-content;
+    text-transform: lowercase;
+  }
+  .writing-item__title {
+    font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    transition: color 0.2s ease;
+  }
+  .writing-item__desc {
+    margin-top: 0.6rem;
+    color: var(--ink-70);
+    font-size: 0.95rem;
+    line-height: 1.55;
+    max-width: 60ch;
+  }
+  .writing-item__aside {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding-top: 0.5rem;
+  }
+  .writing-item__arrow {
+    font-size: 1.1rem;
+    transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+  .writing-item__link:hover .writing-item__arrow {
+    transform: translateX(6px);
+  }
+
+  @media (max-width: 720px) {
+    .writing-item__link {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .writing-item__meta {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.75rem;
+      padding-top: 0;
+    }
+    .writing-item__aside {
+      padding-top: 0.25rem;
+    }
+  }
+</style>

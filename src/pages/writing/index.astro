@@ -1,0 +1,55 @@
+---
+import { getCollection } from "astro:content"
+import BaseLayout from "@/layouts/BaseLayout.astro"
+import WritingList from "@/components/WritingList.astro"
+
+const writing = (await getCollection("writing", ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+  .map((entry) => ({ slug: entry.id, ...entry.data }))
+---
+
+<BaseLayout
+  title="Writing — Ikbal Turgut"
+  description="Essays and notes on engineering, systems, and product craft."
+>
+  <header class="page-head section">
+    <div class="shell">
+      <span class="mono-label">The writing</span>
+      <h1 class="page-title font-serif">
+        Notes on building software with intent.
+      </h1>
+      <p class="page-lede">
+        Longer-form thinking on the craft of engineering — clarity, systems, performance,
+        and the decisions that quietly shape a product.
+      </p>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="shell">
+      <WritingList items={writing} />
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-head {
+    border-top: none;
+    padding-bottom: 0;
+  }
+  .page-title {
+    font-weight: 300;
+    font-size: clamp(2.4rem, 5.5vw, 4rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-top: 1.25rem;
+    max-width: 16ch;
+    text-wrap: balance;
+  }
+  .page-lede {
+    margin-top: 1.5rem;
+    font-size: clamp(1rem, 1.5vw, 1.15rem);
+    color: var(--ink-70);
+    max-width: 52ch;
+  }
+</style>

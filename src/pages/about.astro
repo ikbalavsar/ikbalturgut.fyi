@@ -1,0 +1,146 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro"
+import { site } from "@/config"
+---
+
+<BaseLayout
+  title="About — Ikbal Turgut"
+  description="An engineering practice focused on making complex software clearer."
+>
+  <header class="page-head section">
+    <div class="shell">
+      <span class="mono-label">The practice</span>
+      <h1 class="page-title font-serif">
+        A practice built around clarity under complexity.
+      </h1>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="shell about-grid">
+      <div class="prose">
+        <p>
+          I build web products and the systems underneath them, with a bias toward making
+          complicated things legible — to the people who use them and the people who maintain
+          them. Most of my work sits where interface design meets systems engineering: the
+          seam where a good decision on one side quietly rescues the other.
+        </p>
+        <p>
+          The through-line across everything here is a belief that clarity is engineering
+          work, not a coat of paint. A system that can be read is a system that can be
+          operated, changed, and trusted. That principle shapes how I model data, name things,
+          budget latency, and decide what an interface should refuse to show.
+        </p>
+        <h2>How I work</h2>
+        <p>
+          I prefer boring infrastructure and interesting product. I write migrations I can walk
+          back. I treat performance as a design constraint decided early, not a metric patched
+          late. And I try to leave every system a little more legible than I found it.
+        </p>
+        <h2>This site</h2>
+        <p>
+          This is where I think in public — case notes from real work, essays on the craft, and
+          shorter field notes as they occur to me. It's built to be static, fast, and quiet,
+          the same way I like the systems I work on.
+        </p>
+      </div>
+
+      <aside class="about-side">
+        <div class="side-block">
+          <span class="index-num">Focus</span>
+          <ul>
+            <li>Interface systems</li>
+            <li>Systems architecture</li>
+            <li>Performance &amp; delivery</li>
+            <li>Design systems</li>
+          </ul>
+        </div>
+        <div class="side-block">
+          <span class="index-num">Elsewhere</span>
+          <ul>
+            <li><a class="side-link" href={site.social.github} target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a class="side-link" href={site.social.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></li>
+            <li><a class="side-link" href="/rss.xml">RSS</a></li>
+          </ul>
+        </div>
+        <div class="side-block">
+          <span class="index-num">Contact</span>
+          <ul>
+            <li><a class="side-link" href={`mailto:${site.email}`}>{site.email}</a></li>
+          </ul>
+          <p class="side-avail">{site.availability}</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-head {
+    border-top: none;
+    padding-bottom: 0;
+  }
+  .page-title {
+    font-weight: 300;
+    font-size: clamp(2.4rem, 5.5vw, 4rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-top: 1.25rem;
+    max-width: 18ch;
+    text-wrap: balance;
+  }
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 0.9fr;
+    gap: clamp(2rem, 6vw, 5rem);
+    align-items: start;
+  }
+  .about-side {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    position: sticky;
+    top: 90px;
+  }
+  .side-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: var(--rule-strong);
+  }
+  .side-block ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+  }
+  .side-link {
+    color: var(--ink-70);
+    background-image: linear-gradient(var(--ink), var(--ink));
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    padding-bottom: 2px;
+    transition: color 0.2s ease, background-size 0.3s ease;
+  }
+  .side-link:hover {
+    color: var(--ink);
+    background-size: 100% 1px;
+  }
+  .side-avail {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--ink-55);
+    line-height: 1.5;
+  }
+
+  @media (max-width: 820px) {
+    .about-grid {
+      grid-template-columns: 1fr;
+    }
+    .about-side {
+      position: static;
+    }
+  }
+</style>

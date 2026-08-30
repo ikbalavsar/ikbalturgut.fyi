@@ -1,0 +1,118 @@
+---
+import SystemMap from "@/components/SystemMap.astro"
+---
+
+<section class="hero" aria-labelledby="hero-heading">
+  <div class="shell hero-grid">
+    <div class="hero-copy">
+      <div class="hero-eyebrow">
+        <span class="mono-label">Vol. 01</span>
+        <span class="hero-rule"></span>
+        <span class="mono-label">An engineering practice</span>
+      </div>
+
+      <h1 id="hero-heading" class="hero-headline font-serif">
+        Building software that makes <em>complex things</em> clearer.
+      </h1>
+
+      <p class="hero-support">
+        Independent notes on engineering, systems, and product craft.
+      </p>
+
+      <div class="hero-links">
+        <a href="/#work" class="textlink">
+          Explore selected work <span class="arrow">&#8594;</span>
+        </a>
+        <a href="/writing" class="textlink">
+          Read the writing <span class="arrow">&#8594;</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="hero-map">
+      <SystemMap />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-block: clamp(3rem, 8vw, 7rem);
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: clamp(2rem, 5vw, 4.5rem);
+    align-items: center;
+  }
+  .hero-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+  }
+  .hero-rule {
+    height: 1px;
+    width: clamp(24px, 6vw, 64px);
+    background: var(--ink-40);
+  }
+  .hero-headline {
+    font-weight: 300;
+    font-size: clamp(2.6rem, 6.2vw, 5rem);
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+    max-width: 14ch;
+  }
+  .hero-headline em {
+    font-style: italic;
+    font-weight: 400;
+    position: relative;
+  }
+  .hero-headline em::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0.08em;
+    height: 0.09em;
+    background: var(--lime);
+    z-index: -1;
+  }
+  .hero-support {
+    margin-top: clamp(1.5rem, 3vw, 2.25rem);
+    font-size: clamp(1rem, 1.4vw, 1.15rem);
+    color: var(--ink-70);
+    max-width: 42ch;
+  }
+  .hero-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.75rem;
+    margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  }
+
+  .hero-map {
+    position: relative;
+  }
+  .hero-map::before {
+    content: "FIG.01";
+    position: absolute;
+    top: -1.5rem;
+    right: 0;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+    color: var(--ink-40);
+  }
+
+  @media (max-width: 880px) {
+    .hero-grid {
+      grid-template-columns: 1fr;
+    }
+    .hero-map {
+      order: -1;
+      max-width: 420px;
+    }
+  }
+</style>

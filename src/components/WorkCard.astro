@@ -1,0 +1,202 @@
+---
+interface Props {
+  index: string
+  title: string
+  category: string
+  outcome: string
+  role: string
+  scope: string
+  year: string
+  accent: "lime" | "cobalt" | "ink"
+  href?: string
+  variant?: "wide" | "tall" | "standard"
+}
+
+const {
+  index,
+  title,
+  category,
+  outcome,
+  role,
+  scope,
+  year,
+  accent,
+  href,
+  variant = "standard",
+} = Astro.props
+
+const accentVar =
+  accent === "lime" ? "var(--lime)" : accent === "cobalt" ? "var(--cobalt)" : "var(--ink)"
+---
+
+<article class={`work-card work-card--${variant}`} data-accent={accent}>
+  <a href={href ?? "#"} class="work-card__link" aria-label={title}>
+    <div class="work-card__top">
+      <span class="index-num">{index}</span>
+      <span class="mono-label">{year}</span>
+    </div>
+
+    <div class="work-card__visual" aria-hidden="true">
+      <svg viewBox="0 0 200 120" preserveAspectRatio="xMidYMid meet">
+        {
+          accent === "lime" && (
+            <>
+              <rect x="20" y="70" width="24" height="30" fill="var(--lime)" stroke="var(--ink)" stroke-width="1.2" />
+              <rect x="52" y="50" width="24" height="50" fill="none" stroke="var(--ink)" stroke-width="1.2" />
+              <rect x="84" y="30" width="24" height="70" fill="var(--lime)" stroke="var(--ink)" stroke-width="1.2" />
+              <rect x="116" y="58" width="24" height="42" fill="none" stroke="var(--ink)" stroke-width="1.2" />
+              <line x1="20" y1="100" x2="180" y2="100" stroke="var(--ink)" stroke-width="1" />
+            </>
+          )
+        }
+        {
+          accent === "cobalt" && (
+            <>
+              <circle cx="50" cy="60" r="20" fill="none" stroke="var(--ink)" stroke-width="1.2" />
+              <circle cx="110" cy="60" r="20" fill="none" stroke="var(--ink)" stroke-width="1.2" />
+              <circle cx="150" cy="60" r="8" fill="var(--cobalt)" />
+              <line x1="70" y1="60" x2="90" y2="60" stroke="var(--ink)" stroke-width="1.2" />
+              <line x1="130" y1="60" x2="142" y2="60" stroke="var(--ink)" stroke-width="1.2" />
+              <circle cx="50" cy="60" r="3" fill="var(--ink)" />
+            </>
+          )
+        }
+        {
+          accent === "ink" && (
+            <>
+              <path d="M20 90 L60 40 L100 70 L140 30 L180 60" fill="none" stroke="var(--ink)" stroke-width="1.2" />
+              <circle cx="20" cy="90" r="3" fill="var(--ink)" />
+              <circle cx="60" cy="40" r="3" fill="var(--ink)" />
+              <circle cx="100" cy="70" r="3" fill="var(--ink)" />
+              <circle cx="140" cy="30" r="3" fill="var(--ink)" />
+              <circle cx="180" cy="60" r="3" fill="var(--ink)" />
+            </>
+          )
+        }
+      </svg>
+    </div>
+
+    <div class="work-card__body">
+      <span class="work-card__cat mono-label">{category}</span>
+      <h3 class="work-card__title font-serif">{title}</h3>
+      <p class="work-card__outcome">{outcome}</p>
+    </div>
+
+    <div class="work-card__reveal">
+      <dl>
+        <div>
+          <dt class="mono-label">Role</dt>
+          <dd>{role}</dd>
+        </div>
+        <div>
+          <dt class="mono-label">Scope</dt>
+          <dd>{scope}</dd>
+        </div>
+      </dl>
+      <span class="textlink">
+        View case <span class="arrow">&#8594;</span>
+      </span>
+    </div>
+  </a>
+  <span class="work-card__accent" style={`background:${accentVar}`}></span>
+</article>
+
+<style>
+  .work-card {
+    position: relative;
+    border-top: var(--rule-strong);
+    padding-top: 1.25rem;
+    height: 100%;
+  }
+  .work-card__accent {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    transition: width 0.45s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+  .work-card:hover .work-card__accent {
+    width: 48px;
+  }
+  .work-card__link {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    height: 100%;
+  }
+  .work-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .work-card__visual {
+    border: var(--rule);
+    background: color-mix(in srgb, var(--paper-2) 60%, transparent);
+    padding: 0.75rem;
+  }
+  .work-card__visual svg {
+    width: 100%;
+    height: auto;
+  }
+  .work-card__cat {
+    display: block;
+    margin-bottom: 0.6rem;
+  }
+  .work-card__title {
+    font-size: clamp(1.25rem, 2vw, 1.6rem);
+    font-weight: 400;
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  .work-card__outcome {
+    margin-top: 0.75rem;
+    color: var(--ink-70);
+    font-size: 0.95rem;
+    line-height: 1.55;
+    max-width: 46ch;
+  }
+
+  .work-card__reveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 0.45s cubic-bezier(0.2, 0.6, 0.2, 1), opacity 0.35s ease;
+    margin-top: auto;
+  }
+  .work-card__reveal > * {
+    overflow: hidden;
+  }
+  .work-card:hover .work-card__reveal,
+  .work-card:focus-within .work-card__reveal {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  .work-card__reveal dl {
+    display: flex;
+    gap: 2rem;
+    padding-top: 1rem;
+    border-top: var(--rule);
+    margin-bottom: 0.9rem;
+  }
+  .work-card__reveal dt {
+    margin-bottom: 0.25rem;
+  }
+  .work-card__reveal dd {
+    font-size: 0.85rem;
+    color: var(--ink-70);
+    max-width: 22ch;
+  }
+
+  /* Grid variants */
+  .work-card--wide .work-card__visual svg {
+    aspect-ratio: 16 / 6;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .work-card__reveal {
+      transition: opacity 0.2s ease;
+    }
+  }
+</style>
