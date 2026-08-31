@@ -1,0 +1,97 @@
+---
+title: "What I look for before calling a dashboard fast"
+description: "Dashboard speed is not a single request time. It is the combined experience of useful content, loading states, interaction feedback, and trustworthy freshness."
+date: 2026-08-30
+tag: "performance"
+readingTime: "8 min"
+---
+
+A dashboard is not fast because one request returns quickly. It feels fast when a person can
+orient themselves, ask a question, change the scope, and trust the answer without waiting in
+confusion.
+
+That is a broader standard than a single latency number. It includes rendering, data readiness,
+interaction feedback, cache behavior, and the product’s honesty about what has or has not updated.
+
+## There are several clocks, not one
+
+Before calling a dashboard fast, I look for at least four moments:
+
+- **First useful paint:** when the page gives enough structure to orient a person.
+- **Data readiness:** when the displayed numbers are complete for the current scope.
+- **Interaction response:** when a filter, tab, or drill-down acknowledges an action.
+- **Freshness:** when a recent change is actually reflected in the report.
+
+These clocks can move independently. A page may render its shell immediately but leave the primary
+metric blank. A filter can animate instantly while the query behind it is still using a previous
+value. A save can succeed while the underlying reporting pipeline has not processed the new event
+yet.
+
+Collapsing all of that into “the dashboard loaded in two seconds” hides the part people actually
+experience. The better question is: what can someone confidently do at each stage?
+
+## Loading states should reveal progress, not hide uncertainty
+
+A loading state should preserve context. Replacing an entire dashboard with a spinner makes a
+person re-learn the page whenever they change a filter. Keeping stable navigation, labels, and the
+previously selected scope lets them understand what is being updated.
+
+Good loading behavior tends to have three qualities:
+
+- **Continuity:** the page does not disappear just because one region is refreshing.
+- **Specificity:** the loading treatment appears where work is happening, such as a table or
+  chart, rather than everywhere at once.
+- **Honesty:** a stale value is not presented as if it were already recalculated for the new
+  selection.
+
+Skeletons can help when they mirror the final layout. They are less useful when they become a
+generic ritual that hides whether a request is pending, failed, or simply has no data. Empty,
+loading, and error states should be distinct because each one asks the person to do something
+different.
+
+## Freshness is a product behavior
+
+The most damaging dashboard performance issue is often not a slow query. It is a page that appears
+to confirm a change while continuing to show an older result.
+
+That problem shows up around save flows and asynchronous ingestion. A request may be accepted by
+an API, queued for processing, and only later become visible in an aggregate. Those are three
+different states. Calling all of them “saved” creates a gap between the interface and reality.
+
+The product should decide what each transition means. If a setting has been saved but its report
+will update after processing, say so. If a filter change refreshes a chart but not a related table,
+make that behavior intentional and visible. If the current view is served from a cache, the
+freshness expectation should be compatible with the decisions people make from it.
+
+This is also where navigation and refresh behavior matter. A successful mutation does not
+automatically mean the current route has fetched new data. The journey from Save to return state to
+fresh query deserves the same attention as the mutation itself.
+
+## Measure the transitions people actually make
+
+Server timing and browser performance metrics are valuable, but they are incomplete on their own.
+I want to observe the transitions that define the product:
+
+1. Open a report with a realistic default scope.
+2. Change the most common date range or source filter.
+3. Move between a summary and a detail view.
+4. Save the configuration that affects the report.
+5. Return to the report and verify the expected freshness.
+
+For each transition, look at more than elapsed time. Did the URL describe the new state? Did the
+visible controls and data agree? Was the page still useful while the request was in flight? Could a
+person recover if the request failed?
+
+That kind of check catches issues that a benchmark misses: a filter whose old response wins a race,
+a table that refreshes while its total does not, or a polished skeleton that masks an error.
+
+## Speed includes recovery
+
+Fast systems are also easy to recover from. A failed request should leave a clear retry path and
+preserve the selected filters. A slow report should not erase the question someone was asking. An
+empty result should tell them whether the chosen scope is valid but quiet, or incomplete because a
+required filter is missing.
+
+When people can keep their context and understand the system’s current state, a dashboard feels
+calm even when some work takes time. That is the bar I care about: not the shortest isolated
+request, but the shortest path from a person’s question to an answer they can trust.

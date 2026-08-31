@@ -7,6 +7,7 @@
   --paper-2: #efeadf;
   --ink: #121212;
   --ink-70: rgba(18, 18, 18, 0.7);
+  --ink-muted: rgba(18, 18, 18, 0.64);
   --ink-55: rgba(18, 18, 18, 0.55);
   --ink-40: rgba(18, 18, 18, 0.4);
   --ink-20: rgba(18, 18, 18, 0.2);
@@ -109,14 +110,14 @@ ol {
   font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-55);
+  color: var(--ink-muted);
 }
 
 .index-num {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
-  color: var(--ink-40);
+  color: var(--ink-muted);
   font-variant-numeric: tabular-nums;
 }
 
