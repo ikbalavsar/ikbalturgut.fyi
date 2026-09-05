@@ -5,9 +5,12 @@ const writing = defineCollection({
   loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/writing" }),
   schema: z.object({
     title: z.string(),
+    seoTitle: z.string().optional(),
     description: z.string(),
     date: z.coerce.date(),
     tag: z.string(),
+    cluster: z.enum(["backend-data-systems", "ai-systems", "engineering-practice"]),
+    related: z.array(z.string()).default([]),
     readingTime: z.string().optional(),
     draft: z.boolean().default(false),
   }),

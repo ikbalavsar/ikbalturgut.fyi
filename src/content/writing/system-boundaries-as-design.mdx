@@ -1,0 +1,243 @@
+---
+title: "System boundaries are design decisions"
+seoTitle: "System Boundaries in Software Architecture: Scope, Ownership, and Change"
+description: "Make software systems easier to change by designing explicit boundaries for ownership, data, failure, authorization, and deployment."
+date: 2026-08-20
+tag: "architecture"
+cluster: "engineering-practice"
+related: ["api-design-survives-change", "observability-product-contract", "testing-backend-systems"]
+readingTime: "12 min"
+---
+
+The hardest part of a growing system is rarely choosing another framework. It is deciding where one responsibility ends and another begins.
+
+An application can start as a single service with a single database and still have useful boundaries. A request handler can own input validation. A domain module can own business rules. A repository can own persistence details. A worker can own asynchronous processing. The system becomes difficult when those ownership decisions stay implicit.
+
+When a boundary is unclear, every change crosses it. A small product decision becomes a database migration, a shared helper edit, a queue change, a permission change, and a deployment coordination problem. The code may still be in one repository, but the system behaves like a distributed system without the benefit of explicit contracts.
+
+Good boundaries reduce the number of things that must change together. They make ownership visible, failure understandable, and future extraction optional rather than urgent.
+
+## A boundary is an ownership decision
+
+People often describe boundaries only in terms of folders, packages, or services. Those are implementation shapes. The deeper question is ownership:
+
+- Who is allowed to change this data?
+- Who decides whether this operation is valid?
+- Who is responsible for authorization?
+- Who can retry the operation safely?
+- Who exposes the failure to the user?
+- Who measures whether it is working?
+
+If two modules both answer these questions, the boundary is probably not real. If neither module answers them, the system is relying on accidental behavior.
+
+Consider an order placement flow. The HTTP controller should not decide whether inventory is available, charge a payment method, and write an order row directly. It can coordinate the request, but the ownership of the business decision should live somewhere that can be called consistently from an API, a background job, or a command-line repair tool.
+
+```ts
+type PlaceOrderInput = {
+  customerId: string;
+  items: Array<{ productId: string; quantity: number }>;
+  idempotencyKey: string;
+};
+
+class PlaceOrder {
+  constructor(
+    private readonly inventory: Inventory,
+    private readonly payments: Payments,
+    private readonly orders: Orders,
+  ) {}
+
+  async execute(input: PlaceOrderInput) {
+    const existing = await this.orders.findByIdempotencyKey(input.idempotencyKey);
+    if (existing) return existing;
+
+    const reservation = await this.inventory.reserve(input.items);
+    const payment = await this.payments.authorize(input.customerId, reservation.total);
+
+    return this.orders.create({
+      customerId: input.customerId,
+      items: input.items,
+      reservationId: reservation.id,
+      paymentId: payment.id,
+      idempotencyKey: input.idempotencyKey,
+    });
+  }
+}
+```
+
+This example is not a recommendation to put all business logic in one class. The important detail is that the operation has an owner. The transport layer can map HTTP input into `PlaceOrderInput`, while the application boundary decides which collaborators are required and which invariants must hold.
+
+## Start with change coupling
+
+One practical way to find a missing boundary is to study changes rather than diagrams. Look at the last several feature changes and ask:
+
+1. Which files changed together?
+2. Which teams or roles had to coordinate?
+3. Which tests had to be updated?
+4. Which data shape was shared across unrelated features?
+5. Which deployment had to include multiple independently understandable changes?
+
+Repeated change coupling is evidence. If reporting, billing, and customer settings always require edits to the same “common” module, that module may be hiding several responsibilities. If every feature imports a database model directly, persistence has become the public contract by accident.
+
+The goal is not to eliminate all coupling. Some concepts should change together. The goal is to make the coupling intentional and local. A pricing rule and the price displayed in an invoice probably belong to the same conceptual boundary. A dashboard chart should not need to know the shape of a payment provider response.
+
+## Data ownership comes before service extraction
+
+Splitting a repository into services before assigning data ownership usually creates distributed ambiguity. Two services may both write the same table, each believing the other will maintain an invariant. The table becomes a shared queue of undocumented coordination.
+
+A stronger sequence is:
+
+1. Define the business capability.
+2. Identify the records and invariants it owns.
+3. Define commands and queries that other capabilities may use.
+4. Decide which data can be copied or projected.
+5. Only then consider a process or deployment boundary.
+
+For example, an analytics system may consume order events, but it should not update the order’s payment state. It can maintain a projection optimized for reporting. The order system remains the source of truth for the payment state, while the analytics system owns the shape and freshness of its projection.
+
+That distinction matters when data disagrees. Without ownership, engineers tend to “fix” the discrepancy by writing to whichever table is easiest to reach. With ownership, the repair is a command, replay, or projection rebuild with an accountable owner.
+
+## Authorization is part of the boundary
+
+Authorization should not be a final check added at the edge after the internal operation has already lost its scope. The boundary should carry the tenant, account, user, or source scope into the operation and enforce it where data is selected and changed.
+
+```ts
+type RequestScope = {
+  tenantId: string;
+  actorId: string;
+  sourceId?: string;
+};
+
+async function getDashboard(
+  scope: RequestScope,
+  dashboardId: string,
+) {
+  const dashboard = await dashboards.findOne({
+    id: dashboardId,
+    tenantId: scope.tenantId,
+  });
+
+  if (!dashboard) {
+    throw new NotFoundError("Dashboard not found");
+  }
+
+  await permissions.assertCanReadDashboard(scope, dashboard);
+  return dashboard;
+}
+```
+
+The `tenantId` filter is not merely a controller concern. It is part of the query contract. If a lower layer accepts only `dashboardId`, it cannot prove that the requested record belongs to the caller’s scope. This is one reason “generic repository” abstractions can be dangerous: they often erase the context needed to enforce ownership.
+
+The same principle applies to events and analytics. A query that returns the right rows for one tenant but forgets the source boundary is not mostly correct. It has violated the system boundary.
+
+## Failure boundaries need an explicit policy
+
+Every boundary has failure modes. A synchronous call can time out. A queue message can be delivered twice. A projection can be stale. A provider can accept a request while the local process times out before receiving the response.
+
+The boundary should make the policy visible:
+
+| Operation | Failure meaning | Safe action |
+| --- | --- | --- |
+| Read dashboard data | Data may be unavailable or stale | Return freshness state and retry read if appropriate |
+| Reserve inventory | Reservation may or may not exist | Use an idempotency key and reconcile |
+| Publish event | Downstream may miss the change | Use an outbox or replayable log |
+| Charge payment | Provider state is authoritative | Query status before retrying |
+| Rebuild projection | Derived data is incomplete | Mark progress and resume from a checkpoint |
+
+Retries are not a universal recovery strategy. Retrying a pure read is different from retrying a payment authorization. Retrying a message handler is safe only when the handler is idempotent or has a deduplication mechanism.
+
+This is also why error types should belong to the boundary that understands them. A database timeout should not leak directly into an HTTP response, but it should not be silently converted into “not found” either. The API layer can translate an internal dependency failure into a stable error code while preserving enough context for operations and debugging.
+
+## Synchronous and asynchronous boundaries
+
+An asynchronous boundary is useful when the caller does not need the result immediately, when work can be retried independently, or when several consumers need the same fact. It adds costs: delivery semantics, ordering, delayed visibility, replay, poison messages, and operational tooling.
+
+Use a queue because the domain needs temporal separation, not because the synchronous code feels uncomfortable. A background job that only moves a function call to another process may add failure modes without creating a meaningful boundary.
+
+When choosing asynchronous processing, define the contract before the producer publishes:
+
+- What event happened, and what did not happen?
+- Is the payload a fact or a command?
+- Can consumers process it more than once?
+- How are schema changes introduced?
+- What happens when a consumer is unavailable for an hour?
+- How can an operator replay or quarantine a message?
+
+A versioned event such as `order.payment_authorized.v1` communicates more than a generic `order.updated` event. Consumers can decide whether they need it, and producers do not have to expose every internal column change as a public contract.
+
+## Deployment boundaries are compatibility boundaries
+
+Two components may be owned by different teams but deployed together. Conversely, two modules in one repository may need independent release safety. Deployment boundaries should follow compatibility needs, not fashion.
+
+Before separating a component, check whether it can:
+
+- be tested without the other component’s private database;
+- tolerate the other component being unavailable;
+- version its request and response contract;
+- expose health and dependency signals;
+- be rolled back without corrupting shared state;
+- support a migration window where old and new versions coexist.
+
+The last point is frequently missed. A deployment boundary means old and new versions may run together. If version `A` writes a field that version `B` cannot read, a rolling deployment becomes a data migration incident. Expand-and-contract changes are therefore boundary work, even when the code change appears local.
+
+```text
+Expand: add nullable column or new event field
+       deploy readers that understand old and new shape
+       deploy writers that populate the new shape
+       backfill or replay existing data
+       measure old-shape reads
+Contract: remove old readers and old field after the window closes
+```
+
+The same compatibility window applies to APIs, events, database schemas, and cached values.
+
+## Observability belongs inside the boundary
+
+A boundary that cannot be observed is difficult to operate. Add enough context to answer what happened without reconstructing the entire request from unrelated logs:
+
+- operation name;
+- request or trace identifier;
+- tenant or scope identifier, with sensitive values excluded;
+- dependency and attempt number;
+- result state;
+- duration;
+- freshness or version information where relevant.
+
+Do not treat observability as a generic platform wrapper that knows nothing about the operation. A cache hit, a stale analytics projection, and a failed authorization check are different states even if they all produce an HTTP 200 or 500.
+
+This is where architecture and product behavior meet. If a boundary returns stale data intentionally, the caller needs a way to distinguish stale from current. If it hides a partial failure, the user may make a decision using incomplete information. Technical boundaries should expose the state that affects the product decision.
+
+## Test the boundary, not only the implementation
+
+Boundary tests should verify the promises that survive an internal rewrite. Useful examples include:
+
+- a request cannot read a record outside its tenant scope;
+- an old API client receives a compatible response during migration;
+- a duplicate command returns the original result rather than performing the side effect twice;
+- an event consumer can process a replay safely;
+- a stale projection is labeled as stale;
+- a dependency timeout becomes the documented error state;
+- a module cannot import another module’s private persistence code.
+
+Some of these are runtime tests. Others can be architecture tests, static dependency checks, contract tests, or build-time rules. The mechanism matters less than making the boundary enforceable. A boundary written only in a README will eventually be crossed by a deadline.
+
+## Make the smallest boundary that carries the decision
+
+There is no prize for creating the most services or the deepest abstraction tree. A useful boundary is the smallest unit that can own a decision and be changed without requiring unrelated parts of the system to understand its internals.
+
+That unit might be:
+
+- a function with an explicit input and result state;
+- a module with private data access;
+- a database schema with one owner;
+- a queue contract with replay semantics;
+- a service with an independently versioned API.
+
+Start with the decision that is currently crossing too many places. Name its owner. Move the invariant to that owner. Make scope and failure explicit. Add a test that would fail if the boundary were crossed again.
+
+The best architecture is not the one that predicts every future service. It is the one that makes today’s responsibilities clear and leaves tomorrow’s extraction optional.
+
+## Related notes
+
+- [API design that survives change](/writing/api-design-survives-change)
+- [Observability is a product contract](/writing/observability-product-contract)
+- [Testing is a boundary design problem](/writing/testing-backend-systems)

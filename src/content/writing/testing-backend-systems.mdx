@@ -1,0 +1,203 @@
+---
+title: "Testing is a boundary design problem"
+seoTitle: "Testing Backend Systems: Contracts, Failure Paths, and Confidence"
+description: "Design backend tests around contracts, scope boundaries, failure paths, and observable behavior instead of only testing individual methods."
+date: 2026-08-26
+tag: "testing"
+cluster: "engineering-practice"
+related: ["observability-product-contract", "api-design-survives-change", "system-boundaries-as-design"]
+readingTime: "12 min"
+---
+
+Backend testing is often described as a coverage problem. A team looks at the percentage, adds a few cases, and hopes the number represents confidence.
+
+It rarely does.
+
+A backend can have high line coverage and still return another tenant's data, apply different filters to its count and list queries, retry a non-idempotent operation, or accept an API response that the frontend cannot interpret. The missing tests are usually not random lines. They are missing agreements between boundaries.
+
+I think of testing as a way to make those agreements executable.
+
+## Start with the contract
+
+Before writing a test, define what must remain true.
+
+For an API endpoint, the contract may include:
+
+- which caller can access the resource;
+- which inputs are required and which combinations are invalid;
+- which records belong to the request scope;
+- what happens when the dependency is unavailable;
+- how empty, partial, and failed results differ;
+- and which response shape clients can rely on.
+
+For a background job, the contract may be different:
+
+- the job can be retried safely;
+- progress survives a restart;
+- duplicate delivery does not create duplicate side effects;
+- and a failed item is visible without hiding the rest of the batch.
+
+These are more valuable test targets than private implementation details because they represent behavior other parts of the system depend on.
+
+## Unit tests are necessary and incomplete
+
+Unit tests are excellent for deterministic rules. They can prove that a date range is normalized correctly, a conversion rate handles a zero denominator, or a query builder emits the allowed dimensions.
+
+They become less useful when they mock every dependency and never verify the boundary between components. A controller test can pass while the real serializer omits a field. A service test can pass while the database query drops a tenant predicate. A retry test can pass while the external operation is not idempotent.
+
+I use different test layers for different questions:
+
+1. **Unit tests:** does one rule or transformation behave correctly?
+2. **Contract tests:** do two components agree on requests, responses, and errors?
+3. **Integration tests:** does the real data access path preserve the intended behavior?
+4. **End-to-end tests:** can a user complete the critical workflow?
+5. **Operational tests:** does the system fail, recover, and report the failure as designed?
+
+The goal is not to put every rule in every layer. It is to place each important contract where it can be observed most directly.
+
+## Test authorization as data correctness
+
+Authorization tests should not only assert that an endpoint returns 403 for an unauthorized user. They should prove that an authorized request cannot cross the wrong data boundary.
+
+For a tenant-scoped report, the important cases include:
+
+- the caller can read records from the selected tenant;
+- the caller cannot read another tenant by changing an identifier;
+- a source outside the tenant is rejected;
+- a missing source scope does not silently widen the query;
+- and pagination cannot reveal records from a different scope.
+
+The last case is easy to miss. A first page may be correctly filtered while a cursor or count query uses a broader predicate. Boundary tests should exercise the complete operation, not only the first SQL fragment.
+
+```ts
+it("does not return records outside the requested tenant", async () => {
+  const response = await requestReport({
+    actor: tenantUser,
+    tenantId: tenantUser.tenantId,
+    sourceId: tenantSource.id,
+  })
+
+  expect(response.items.every((item) => item.tenantId === tenantUser.tenantId)).toBe(true)
+})
+```
+
+The exact framework is not important. The assertion should reflect the security and product contract rather than the internal shape of the query builder.
+
+## Test negative space
+
+Happy paths tell you that the system can work. Failure paths tell you whether it can be operated.
+
+Useful negative cases include:
+
+- malformed input;
+- valid input with no matching data;
+- a dependency timeout;
+- a partial dependency response;
+- an expired authorization context;
+- a duplicate request;
+- a stale version or optimistic-lock conflict;
+- an empty result that must not be confused with an error;
+- and a cancellation after expensive work has started.
+
+These cases should produce intentional outcomes. A timeout should not become a 500 with no retry guidance if the client can safely retry. A missing resource should not be represented as an empty success if the UI needs to show a not-found state. A duplicate job should not create a second notification.
+
+The test name should describe the contract: `returns_stale_state_when_refresh_fails`, not `handles_error_case_2`.
+
+## Contract tests prevent silent drift
+
+Shared types help, but they do not prove runtime compatibility. Two services can compile against the same interface and still disagree about optional fields, error codes, date formats, or pagination behavior.
+
+Contract tests should verify the actual request and response boundary. For a list endpoint, that may include:
+
+- required query parameters;
+- allowed sorting values;
+- stable response fields;
+- empty and partial states;
+- error status and error body;
+- and count semantics.
+
+When a backend changes a field, the test should make the compatibility decision visible. Additive changes may be safe. Renaming or changing the meaning of a field may require an expand-migrate-contract sequence in both code and data.
+
+Contract tests are especially valuable when frontend and backend deployments do not happen at the same time.
+
+## Test queries as behavior, not strings
+
+Database tests should verify the answer and the boundary, not only whether a SQL string contains a particular fragment.
+
+For analytical queries, I want tests for:
+
+- identical scope predicates across list, count, and aggregate queries;
+- inclusive and exclusive date boundaries;
+- time-zone conversion;
+- zero denominators and empty groups;
+- supported and rejected dimensions;
+- escaping or parameter handling for values;
+- and stable ordering for pagination.
+
+A query can be syntactically valid and semantically wrong. Snapshotting the generated SQL may help detect accidental changes, but it should not be the only proof. A small fixture with known events can verify the result the user actually sees.
+
+## Make retries testable
+
+Retry behavior is part of the contract whenever the system calls an external dependency or runs a background operation.
+
+The test should distinguish retryable and non-retryable failures. It should prove that the retry count is bounded and that backoff does not hold the request open forever. For a write operation, it should prove idempotency or verify that the operation is not retried.
+
+```ts
+it("does not repeat a non-idempotent write after an unknown outcome", async () => {
+  gateway.write.mockRejectedValueOnce(new TimeoutAfterCommit())
+
+  await expect(runPaymentOperation(operation)).rejects.toThrow("unknown outcome")
+  expect(gateway.write).toHaveBeenCalledTimes(1)
+})
+```
+
+The important behavior is not the exception class. It is that the system does not turn uncertainty into a duplicate side effect.
+
+## Use property-based thinking for boundaries
+
+Some rules are easier to express as properties than as individual examples.
+
+For pagination, a useful property is that moving through pages does not duplicate or skip records under a stable snapshot. For a normalization function, equivalent inputs should produce the same canonical output. For a scope filter, every returned record must belong to the requested tenant.
+
+Property-based testing can generate ranges, empty values, duplicate identifiers, and unusual ordering cases that a few hand-written examples miss. It does not replace domain examples; it expands the space around them.
+
+The property should remain understandable. A complicated generated test that nobody can interpret becomes another artifact the team stops trusting.
+
+## Measure confidence by escaped failures
+
+Coverage is a diagnostic signal, not a product outcome. I care about failures that escape the test suite:
+
+- production incidents that a contract test could have caught;
+- regressions found during manual QA;
+- mismatches between list and count results;
+- authorization bugs;
+- flaky tests that hide real failures;
+- and slow tests that developers stop running.
+
+After an incident, the useful question is not only "which line failed?" It is "which contract was missing from our test model?"
+
+That question produces better tests. If a stale cache returned the wrong tenant's result, add a scope-aware cache test and a data isolation check. If a migration broke an old worker, add a compatibility test for the deployment window. If a dashboard showed an empty state during a timeout, test the distinction between empty and failed.
+
+## Keep tests fast enough to be used
+
+A slow test suite changes behavior. Developers run fewer tests, CI feedback arrives late, and small failures accumulate into a large batch that nobody wants to investigate.
+
+Fast feedback is not only a developer-experience preference. It increases the probability that a contract is checked before a change is merged.
+
+Some practical boundaries help:
+
+- keep pure rules in fast unit tests;
+- reserve real database tests for query behavior and integration contracts;
+- isolate external services behind deterministic test doubles or local test environments;
+- avoid sleeping to simulate time when a controllable clock is enough;
+- and keep end-to-end tests focused on critical user journeys.
+
+The best test suite is not the one with the most realistic setup everywhere. It is the one that gives the right evidence at the right cost.
+
+## Testing is executable architecture
+
+Good tests describe the system's boundaries. They say which data a request may see, which behavior a client can depend on, which failure is retryable, and which state requires human intervention.
+
+That is why testing belongs in architecture conversations, not only after implementation. When a boundary is difficult to test, the design may be hiding too much state, mixing responsibilities, or leaving ownership ambiguous.
+
+The goal is not perfect coverage. It is a system whose important promises are cheap to verify and difficult to accidentally break.

@@ -1,8 +1,11 @@
 ---
 title: "Dashboard performance is a product problem"
-description: "A dashboard is fast when people can orient themselves, change the question, and trust the answer without waiting in confusion."
+seoTitle: "Dashboard Performance: Loading States, Queries, and Freshness"
+description: "Improve dashboard performance through useful paint, data readiness, stable loading states, efficient queries, caching, and honest freshness."
 date: 2026-08-29
 tag: "performance"
+cluster: "backend-data-systems"
+related: ["clickhouse-real-time-analytics", "aspnet-core-scalable-backends", "reversible-migrations"]
 readingTime: "12 min"
 ---
 
@@ -100,6 +103,20 @@ Filters are often treated as controls, but they are also query-shaping decisions
 A filter experience becomes slow and confusing when the UI treats these values as an unstructured bag of state. The request can start before all constraints have settled, the URL can describe a different scope than the query, or a cached response can be reused for an answer it does not actually represent.
 
 I prefer to model the report scope explicitly. The client should know which values are required, which values are optional, and which combinations are invalid. The API should validate the same boundary rather than assuming the browser got it right. Cache keys should include every input that changes the answer.
+
+```ts
+type ReportScope = {
+  from: string
+  to: string
+  sourceId: string
+  attributionModel: "first_touch" | "last_touch"
+}
+
+const scopeKey = (scope: ReportScope) =>
+  [scope.sourceId, scope.from, scope.to, scope.attributionModel].join(":")
+```
+
+The useful detail is not the helper itself. It is that the inputs which change the answer are named in one place, making an incomplete cache key easier to spot during review.
 
 This is both a correctness practice and a performance practice. A well-defined scope reduces accidental queries, makes cache behavior predictable, and prevents the interface from showing a fast answer to the wrong question.
 

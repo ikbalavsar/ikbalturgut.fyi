@@ -1,0 +1,226 @@
+---
+title: "API design that survives change"
+seoTitle: "API Design for Evolving Systems: Contracts, Errors, and Compatibility"
+description: "Design APIs that can evolve safely through explicit contracts, stable errors, scoped inputs, compatibility windows, and honest response states."
+date: 2026-08-22
+tag: "API design"
+cluster: "engineering-practice"
+related: ["system-boundaries-as-design", "testing-backend-systems", "observability-product-contract"]
+readingTime: "13 min"
+---
+
+An API is easy to design when the only client is the code you are writing today.
+
+It becomes a product when other teams, frontends, jobs, integrations, and future versions depend on it. At that point, the API is no longer a convenient function over HTTP. It is a public agreement about names, scope, errors, timing, and what the system is willing to promise.
+
+The most durable APIs are not the ones that predict every future requirement. They are the ones that make change explicit and preserve the meaning of existing operations while new behavior is introduced.
+
+## Design the question before the endpoint
+
+An endpoint should answer a product question, not expose a database table because the table already exists.
+
+"Get events" is incomplete. Which tenant? Which source? Which time definition? What counts as an event? How fresh must the result be? Does the caller need a page, a total, or a stream?
+
+The request should express the question clearly enough that the server can validate it and the response can explain what it answered.
+
+For example:
+
+```http
+GET /reports/conversions?sourceId=...&from=2026-08-01&to=2026-08-31&model=first_touch
+```
+
+This is more useful than a generic `/events` endpoint with a collection of loosely interpreted query parameters if the product is actually asking for conversion attribution.
+
+The name is not cosmetic. It sets expectations about semantics, caching, permissions, and future compatibility.
+
+## Scope belongs in the contract
+
+Tenant, source, date range, actor, and attribution mode are often treated as UI state. They are API semantics.
+
+If a filter changes which records the caller can see or what the result means, it should be represented in the request contract and validated at the server boundary. The server must not rely on the browser having applied the right combination.
+
+Typed input helps make this visible:
+
+```ts
+type ConversionReportRequest = {
+  tenantId: string
+  sourceId: string
+  from: string
+  to: string
+  attributionModel: "first_touch" | "last_touch"
+}
+```
+
+The backend may derive `tenantId` from authentication instead of accepting it from the client. The important decision is that the scope is explicit and cannot be silently widened when a new filter is added.
+
+Scope should also be applied consistently. If a list endpoint, count endpoint, export endpoint, and summary card answer the same question, they need the same population definition.
+
+## A response needs state, not only data
+
+Many APIs return an array and expect the client to infer everything else. An empty array may mean no records, invalid scope, delayed ingestion, or a failed query that was swallowed by a fallback.
+
+A durable response distinguishes the state the product needs to communicate:
+
+```json
+{
+  "state": "current",
+  "items": [],
+  "page": {
+    "limit": 25,
+    "nextCursor": null
+  },
+  "freshThrough": "2026-08-31T23:59:59Z"
+}
+```
+
+The exact envelope is a product choice. The principle is to avoid forcing every client to reconstruct meaning from the absence of a value.
+
+When the result is delayed or partial, the API should say so. A successful HTTP status does not necessarily mean that the business answer is complete.
+
+## Errors are part of the public API
+
+An error response is not an implementation detail. It tells the client what can be fixed, what can be retried, and what should stop.
+
+Useful error contracts distinguish:
+
+- invalid input;
+- unauthenticated or unauthorized access;
+- missing resource;
+- conflict with current state;
+- rate limiting;
+- dependency failure;
+- and unexpected server failure.
+
+The response should include a stable machine-readable code, a human-readable message, and a correlation or request identifier when investigation may be required.
+
+```json
+{
+  "error": {
+    "code": "REPORT_SCOPE_NOT_ALLOWED",
+    "message": "The selected source is not available in this tenant.",
+    "requestId": "req_01H..."
+  }
+}
+```
+
+Avoid making clients parse English messages to decide behavior. Messages can improve over time; error codes should remain stable enough for a client to respond correctly.
+
+## Compatibility is a timeline
+
+An API change is not safe because the new server works in isolation. It is safe when old and new clients can coexist during the deployment window.
+
+Additive changes are often easier to introduce: a new optional field, a new endpoint, or a new supported enum value with a documented fallback. Renaming a field, changing its type, removing an error code, or changing the meaning of a status is more disruptive.
+
+For a breaking change, the system needs a timeline:
+
+1. Add the new representation while keeping the old one.
+2. Teach clients to understand the new representation.
+3. Observe adoption and fallback behavior.
+4. Announce a deprecation window.
+5. Remove the old representation after the dependency has moved.
+
+This is the API version of expand-migrate-contract. Compatibility is a sequence, not a flag added at the last minute.
+
+## Avoid leaking storage models
+
+Returning database columns directly is fast at the beginning and expensive later. Storage names, nullability, joins, and internal identifiers become client dependencies. A schema migration then becomes an API migration whether the team intended it or not.
+
+The API should expose a domain shape that is stable enough for the product. That does not mean creating a huge abstraction layer for every field. It means deciding which fields are public, which are implementation details, and which names communicate the intended meaning.
+
+This also protects security. A database record may contain fields that are useful internally but should never be serialized for the current actor. Response mapping is a boundary, not boilerplate.
+
+## Pagination needs stable semantics
+
+Pagination is not only a limit parameter. It is a promise about what the next page means.
+
+Offset pagination can be understandable for small, stable lists. Cursor pagination can behave better when records are changing, but only if the sort order is stable and the cursor encodes enough state to resume the same traversal.
+
+Every paginated endpoint should define:
+
+- default and maximum page size;
+- stable sort order;
+- cursor or offset semantics;
+- behavior when records change during traversal;
+- and whether the total count is exact, estimated, or unavailable.
+
+The list and count paths must use the same filters. Otherwise the API gives the client two incompatible answers to the same question.
+
+## Idempotency makes retries safe
+
+Clients retry because networks fail. If a write endpoint cannot distinguish a repeated request from a new one, a timeout can create duplicate side effects.
+
+Idempotency keys are useful for operations such as creating a job, initiating a payment, or publishing an event. The server should store the operation result or a durable status and return the same outcome for a repeated key within its defined lifetime.
+
+The contract should specify what happens when the same key is reused with different input. Treating it as a new request is dangerous; silently accepting the changed payload is worse. A conflict response makes the ambiguity explicit.
+
+Idempotency is not required for every read, but every retryable write needs a story.
+
+## Design for time and freshness
+
+APIs often represent current data, delayed data, and historical data with the same shape. This makes client behavior simple until users start asking why a recent action is missing.
+
+Where freshness matters, include metadata that explains the answer:
+
+- generated time;
+- source time range;
+- last processed event time;
+- cache status;
+- or a state such as current, delayed, or stale.
+
+This lets the interface be honest without hardcoding knowledge of the ingestion pipeline. It also makes support conversations easier: the team can see whether the source had not arrived yet or the query used an old cache.
+
+## Make validation close to the boundary
+
+Validation should happen early, but not only once.
+
+The client can prevent obvious mistakes and provide immediate feedback. The API must validate again because it is the authority at the trust boundary. The service can enforce domain rules. The database can enforce invariants that must never be violated.
+
+These layers are not duplicate work when they answer different questions:
+
+- Is the request syntactically valid?
+- Is the caller allowed to ask it?
+- Is the requested operation valid for the current domain state?
+- Can the storage invariant be maintained?
+
+Keeping those questions separate produces better errors and more focused tests.
+
+## Observe API behavior, not only API errors
+
+An endpoint can return 200 for every request and still be failing users. It may return stale data, empty results caused by a broken scope, or a response that clients interpret differently after a deployment.
+
+Useful API telemetry includes:
+
+- operation and route;
+- status and stable error code;
+- latency by outcome;
+- scope class without sensitive identifiers;
+- cache and freshness state;
+- retry or fallback path;
+- and client version when compatibility matters.
+
+This evidence connects the public contract to actual behavior. If a deprecated field is still used by a client, telemetry should tell you before removal.
+
+## Test the contract with clients in mind
+
+API tests should verify more than controller status codes.
+
+I want tests for:
+
+- authorization and scope boundaries;
+- exact validation errors;
+- stable response fields;
+- empty, delayed, and failed states;
+- pagination and count consistency;
+- idempotent retries;
+- compatibility with older clients;
+- and behavior when a dependency times out.
+
+Contract tests can run against a real service boundary. Integration tests can prove that the data path preserves the scope. End-to-end tests can confirm that a user can still understand the response after the frontend consumes it.
+
+## Durable APIs are deliberately boring
+
+The most reliable API designs are not the ones with the most endpoints or the most clever abstractions. They make the question, scope, response state, errors, compatibility window, and retry behavior explicit.
+
+That clarity gives clients room to evolve without making every backend change a negotiation. It gives operators enough evidence to explain behavior. It gives tests contracts that can be checked at the right boundary.
+
+An API survives change when its meaning remains stable even as its implementation moves underneath it. The job of the design is to protect that meaning.

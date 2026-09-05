@@ -13,6 +13,10 @@ export async function getStaticPaths() {
 
 const { entry } = Astro.props
 const { Content } = await render(entry)
+const writingEntries = await getCollection("writing", ({ data }) => !data.draft)
+const relatedEntries = entry.data.related
+  .map((slug) => writingEntries.find((candidate) => candidate.id === slug))
+  .filter((candidate): candidate is (typeof writingEntries)[number] => Boolean(candidate))
 
 const fmt = (d: Date) =>
   d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
@@ -51,7 +55,7 @@ const breadcrumbSchema = {
 ---
 
 <BaseLayout
-  title={`${entry.data.title} — Ikbal Turgut`}
+  title={entry.data.seoTitle ?? `${entry.data.title} — Ikbal Turgut`}
   description={entry.data.description}
   ogType="article"
   structuredData={[articleSchema, breadcrumbSchema]}
@@ -81,6 +85,28 @@ const breadcrumbSchema = {
       <div class="prose">
         <Content />
       </div>
+
+      {relatedEntries.length > 0 && (
+        <aside class="related" aria-labelledby="related-title">
+          <div class="related-head">
+            <span class="mono-label">Continue reading</span>
+            <h2 id="related-title" class="related-title font-serif">Related notes</h2>
+          </div>
+          <ul class="related-list">
+            {relatedEntries.map((related) => (
+              <li>
+                <a href={`/writing/${related.id}`} class="related-link">
+                  <span>
+                    <span class="related-tag">{related.data.tag}</span>
+                    <span class="related-name">{related.data.title}</span>
+                  </span>
+                  <span class="arrow" aria-hidden="true">&#8594;</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
 
       <footer class="article-foot">
         <span class="mono-label">End of note</span>
@@ -143,6 +169,51 @@ const breadcrumbSchema = {
     color: var(--ink-70);
     font-family: var(--font-serif);
     font-style: italic;
+  }
+  .related {
+    margin-top: clamp(3rem, 6vw, 5rem);
+    padding-top: 1.5rem;
+    border-top: var(--rule-strong);
+    max-width: 65ch;
+  }
+  .related-title {
+    margin-top: 0.65rem;
+    font-weight: 300;
+    font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+    line-height: 1;
+  }
+  .related-list {
+    margin-top: 1.5rem;
+    border-top: var(--rule);
+  }
+  .related-list li {
+    border-bottom: var(--rule);
+  }
+  .related-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    padding-block: 1rem;
+  }
+  .related-link:hover .related-name {
+    color: var(--cobalt);
+  }
+  .related-tag {
+    display: block;
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+  }
+  .related-name {
+    display: block;
+    margin-top: 0.35rem;
+    font-family: var(--font-serif);
+    font-size: 1.15rem;
+    line-height: 1.2;
+    transition: color 0.2s ease;
   }
   .article-foot {
     max-width: 65ch;

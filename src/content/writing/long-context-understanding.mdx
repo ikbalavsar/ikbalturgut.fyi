@@ -1,8 +1,11 @@
 ---
 title: "Why long context does not equal understanding"
-description: "More context can give an AI system more information and less signal. Reliable applications treat context as a budget for relevance, ordering, evidence, and attention."
+seoTitle: "Why Long Context Fails: Retrieval, Dilution, and Context Budgeting"
+description: "Understand why long context fails: context dilution, irrelevant retrieval, ordering, chunking, provenance, and context budgeting."
 date: 2026-08-31
 tag: "AI systems"
+cluster: "ai-systems"
+related: ["ai-assisted-code-analysis", "model-routing-cost-optimization", "reliable-ai-agents"]
 readingTime: "12 min"
 ---
 
@@ -57,6 +60,23 @@ Task-specific retrieval can combine several signals:
 - and explicit user-selected files.
 
 The retrieval layer should also explain why each item was included. "Included because it calls the selected service" is more useful than a similarity score that no reviewer can interpret.
+
+```ts
+type ContextItem = {
+  source: string
+  kind: "implementation" | "test" | "config" | "history"
+  reason: string
+  revision: string
+  priority: number
+}
+
+const context = items
+  .filter((item) => item.kind !== "history" || task.requiresHistory)
+  .sort((a, b) => b.priority - a.priority)
+  .slice(0, task.contextLimit)
+```
+
+This kind of metadata gives the model and the reviewer a shared explanation of the context. The selection is still imperfect, but it is no longer an invisible similarity search that cannot be audited.
 
 ## More documents can create more ambiguity
 
