@@ -1,19 +1,23 @@
 ---
 index: "01"
-title: "An observability console people actually read"
-category: "Product · Interface systems"
-outcome: "Turned a wall of raw telemetry into a calm, legible surface engineers trust during incidents."
-role: "Design engineering, front-end architecture"
-scope: "Interface system, data modeling, live-streaming UI"
-year: "2024"
+title: "Building the data layer behind real-time analytics"
+category: "Product systems · Data infrastructure"
+outcome: "Built real-time analytics and e-commerce attribution APIs around modular services, explicit validation, and high-volume query performance."
+role: "Full-stack development, backend architecture"
+scope: "TypeScript, Elysia, ClickHouse, query builders, data executors"
+year: "2025–Present"
 accent: "cobalt"
 featured: true
 order: 1
 ---
 
-The starting point was a dense internal tool that showed everything and communicated
-nothing. The work was less about adding features and more about deciding what deserved
-attention during the worst ten minutes of someone's week.
+Analytics systems are only useful when their answers can be trusted. The work here spans
+the layers between a product question and the data that answers it: service boundaries,
+request validation, query construction, and execution against high-volume event data.
 
-I reframed the console around a small vocabulary of states, a strict typographic
-hierarchy, and streaming updates that never moved content under the reader's eyes.
+I worked toward a modular architecture in which those responsibilities stay explicit. That
+makes it easier to add a report or attribution dimension without quietly changing the meaning
+of an existing one.
+
+The satisfying outcome is not a more complicated data layer. It is an analytics product that
+can answer more useful questions while keeping scope, performance, and correctness visible.

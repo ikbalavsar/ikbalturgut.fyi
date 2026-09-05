@@ -1,31 +1,189 @@
 ---
-title: "Write migrations you can walk back"
-description: "Forward-only is a strategy for systems you fully understand. Most of the time, you do not — so build the road back before you drive down it."
-date: 2026-10-14
-tag: "engineering"
-readingTime: "5 min"
+title: "Database migrations should have a road back"
+description: "A migration is not complete when the new schema exists. It is complete when the change can be introduced, observed, and reversed without panic."
+date: 2026-09-01
+tag: "backend systems"
+readingTime: "11 min"
 ---
 
-There's a quiet confidence in a forward-only migration. It says: I know exactly what this
-change does and I will never need to undo it. Occasionally that's true. Usually it's a bet
-you're making without noticing.
+There is a quiet confidence in a forward-only database migration. It says: the new shape is correct, the deployment will go as planned, and nobody will need to return to the old one.
 
-## The road back
+Occasionally, that confidence is justified. Most of the time, it is a bet being made without being named.
 
-My rule of thumb: write every schema change so it can be reverted without calling a meeting.
-Not because you'll always revert, but because the discipline of designing the reverse path
-surfaces the risk you were about to take.
+I prefer migrations with a road back. Not because every change should be undone, but because designing the reverse path forces the team to understand what is changing, who depends on it, and which parts of the system must move together. Reversibility is a form of system comprehension.
 
-If you can't cleanly reverse a change, that's not a reason to skip the reverse — it's a signal
-the change is bigger than it looked.
+It also changes the emotional cost of shipping. When a release can be paused or reversed in small steps, a bad signal is information. When the only recovery plan is restoring a backup and hoping the application catches up, every deploy becomes a high-stakes event.
+
+## A migration is a sequence, not a file
+
+The word migration often describes one file that adds a column, renames a table, or changes an index. Operationally, the real migration is a sequence across several states:
+
+1. The old application and old schema work together.
+2. The schema can support both old and new application versions.
+3. The new application begins using the new shape.
+4. Existing records are backfilled or transformed.
+5. The old shape is no longer needed.
+6. The compatibility layer is removed.
+
+Thinking in states makes a dangerous question visible: can the application be rolled back at each step?
+
+If the answer is no, the change may still be shippable, but it is not a small migration. It is a coordinated cutover and should be planned, observed, and communicated as one.
 
 ## Expand, migrate, contract
 
-The pattern that makes this practical is boring and old:
+The pattern I return to is deliberately boring:
 
-1. **Expand** — add the new shape alongside the old.
-2. **Migrate** — move reads and writes over, gradually.
-3. **Contract** — remove the old shape once nothing depends on it.
+- **Expand:** add the new shape without removing the old one.
+- **Migrate:** move reads and writes to the new shape and backfill existing data.
+- **Contract:** remove the old shape after all consumers have moved.
 
-Each step is independently reversible. You're never more than one small, understood move away
-from where you just were. That's what makes moving fast actually safe.
+Suppose a `users` table currently stores a single `name` field, but the product now needs separate display and legal names. A risky migration renames `name` and changes every application path in the same release. A reversible sequence adds `display_name` and `legal_name`, keeps `name` available, writes both representations for a transition period, backfills existing rows, moves reads to the new fields, and only then removes the old column.
+
+The sequence may take longer on paper, but each step is easier to understand. More importantly, the application can usually be rolled back without pretending the database never changed.
+
+## Compatibility is a contract
+
+During the transition, more than one version of the application may interact with the database. A rolling deployment can leave old instances running while new instances start receiving traffic. Background jobs may deploy on a different schedule. A worker in another repository may still write the old shape.
+
+That means the expanded schema must support the compatibility window, not just the final application.
+
+For an additive change, this is often straightforward. For a renamed field, it requires a deliberate dual-read or dual-write strategy. The important part is to choose the direction of authority.
+
+One safe approach is:
+
+1. Add the new field.
+2. Start writing the new field while continuing to write the old field.
+3. Backfill the new field from the old field.
+4. Change reads to prefer the new field, with a temporary fallback if necessary.
+5. Stop writing the old field after observing the new path.
+6. Remove the old field in a later release.
+
+Dual writes are not free. They can drift, fail partially, or hide a transformation bug. If you use them, measure mismatches and make the source of truth explicit. A compatibility layer that is never observed becomes permanent folklore.
+
+## Rollback has more than one meaning
+
+Teams often say "we can roll back" when they mean only that they can deploy the previous application version. That is not the same as reversing the database change.
+
+There are at least three rollback questions:
+
+- Can the application binary go back?
+- Can the schema still serve the previous binary?
+- Can the data transformation be reversed without losing information?
+
+The third question is where many migrations stop being reversible. Converting a structured value into a less structured value may discard information. Deleting a column is not reversible unless its contents exist somewhere else. Merging two records can be logically irreversible even if the SQL statement can be syntactically undone.
+
+I write down the rollback meaning before implementation. Sometimes the correct answer is a true reverse migration. Sometimes it is a forward fix that preserves the data and restores the old behavior. Sometimes the change must be treated as irreversible, with a backup, a freeze window, and an explicit approval.
+
+The important thing is not to use the word rollback as a comforting shortcut.
+
+## Backfills should be separate operations
+
+A schema change and a data backfill have different risk profiles.
+
+The schema change should usually be quick and predictable. The backfill may need to process millions of rows, yield between batches, avoid peak traffic, and resume after failure. Combining them into one deployment makes both harder to reason about.
+
+A safer backfill has:
+
+- bounded batches;
+- an ordering or cursor that makes progress explicit;
+- idempotent writes;
+- a way to resume after interruption;
+- metrics for processed, skipped, failed, and mismatched rows;
+- a validation query that can compare old and new representations.
+
+For example, a worker can process records by primary-key ranges and update only rows that have not been migrated. If it runs twice, the second run should produce the same final state. If a single record fails, the worker should record it and continue or stop according to a deliberate policy rather than leaving progress unknown.
+
+The backfill is part of the migration design even if it lives in a separate command.
+
+## Indexes and constraints need their own plan
+
+Adding a column is often safe; adding a constraint or index may have a very different operational cost. A uniqueness constraint can reveal existing duplicates. A non-null constraint can fail on historical rows. An index can compete with application traffic while it is built.
+
+Treat each of these as a separate step with its own precondition:
+
+- Before adding uniqueness, measure duplicates and decide how to resolve them.
+- Before adding non-null, prove that every existing row has a valid value.
+- Before enforcing a foreign key, find orphaned records.
+- Before adding an index, understand the query it is meant to support and how it will affect writes.
+
+The migration should not discover the data quality problem at the moment the constraint is applied. Discovery belongs before enforcement.
+
+## Make the migration observable
+
+A reversible plan is incomplete if nobody can tell which state the system is in.
+
+I want to know:
+
+- which application version is writing the new shape;
+- how many records have been backfilled;
+- how many old and new values disagree;
+- whether fallback reads still occur;
+- whether the new query path has different latency or error behavior;
+- when it is safe to contract the old shape.
+
+Temporary counters are worthwhile. A fallback-read metric can tell you whether a backfill is incomplete. A mismatch metric can reveal a transformation bug before the old field disappears. A feature flag can let the team switch reads without redeploying the entire application.
+
+Observability turns migration state from an assumption into evidence.
+
+## A small example
+
+Imagine introducing a normalized `account_id` to replace a legacy `account_key`:
+
+```sql
+ALTER TABLE orders ADD COLUMN account_id UUID;
+```
+
+That statement is only the expand step. A complete plan might be:
+
+1. Add `account_id` as nullable.
+2. Deploy code that writes both `account_key` and `account_id`.
+3. Backfill `account_id` in resumable batches.
+4. Compare both values and monitor fallback reads.
+5. Switch reads to `account_id`.
+6. Add the constraint and index after validation.
+7. Stop writing `account_key`.
+8. Remove `account_key` in a later release.
+
+At every point, ask whether the previous application version can still function. If not, the step needs a compatibility layer or a coordinated deployment.
+
+## When a true reverse migration is the wrong goal
+
+Reversibility does not mean preserving every old shape forever. It means making the risk and recovery path explicit.
+
+Some changes are naturally destructive: deleting personal data, changing an irreversible external side effect, or collapsing information into a smaller representation. In those cases, a fake `down` migration can be more dangerous than no `down` migration because it creates false confidence.
+
+The safer approach may be:
+
+- preserve an export or audit record before the destructive step;
+- run the change behind a feature flag;
+- use a forward correction path instead of restoring old tables;
+- define who approves the irreversible action;
+- test the recovery procedure in a non-production environment.
+
+The goal is not to satisfy a migration framework's idea of symmetry. The goal is to give the team a credible response when reality disagrees with the plan.
+
+## A migration review checklist
+
+Before shipping a meaningful schema change, I ask:
+
+- What are the old, transition, and final states?
+- Can old and new application versions coexist?
+- Which data is transformed, and can the transformation lose information?
+- Is the backfill idempotent and resumable?
+- What happens if it stops halfway through?
+- Which constraints or indexes need separate validation?
+- How will we know that fallback behavior is still being used?
+- Can we restore behavior with a forward fix if the data cannot be reversed?
+- What is the exact point at which the old shape can be removed?
+
+These questions slow down the design conversation by a few minutes. They often save hours of emergency reasoning later.
+
+## The road back is a design tool
+
+A reversible migration is not merely a database technique. It is a way of making change legible.
+
+Expand, migrate, contract gives the application room to evolve. Compatibility turns rolling deployment from a hidden dependency into an explicit contract. Resumable backfills make large data movement operational instead of magical. Observability tells the team when the old path is truly gone.
+
+Forward-only changes can still be correct. But when a change cannot be reversed, that should be the result of a conscious decision, not the default shape of the migration file.
+
+The best migration is not the one with the fewest lines. It is the one that gives the team a clear next move when the system behaves differently than expected.

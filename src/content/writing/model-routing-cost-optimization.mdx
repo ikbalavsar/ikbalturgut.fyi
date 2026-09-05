@@ -1,0 +1,237 @@
+---
+title: "Model routing is a product decision, not only a cost optimization"
+description: "Choosing the right model for each workload requires quality gates, confidence-based fallback, caching, latency budgets, and observability."
+date: 2026-08-30
+tag: "AI systems"
+readingTime: "12 min"
+---
+
+Using one large model for every AI request is simple. It is also usually an expensive way to hide the fact that the application has several different tasks.
+
+A short classification request, a structured extraction, a codebase analysis, and a high-stakes customer response do not need the same amount of reasoning or context. If they all use the same model, the application pays the highest price for the simplest work and still needs special handling for the hardest work.
+
+Model routing is the practice of choosing a model or execution path according to the request. Done well, it improves cost, latency, and reliability at the same time. Done badly, it creates a complicated collection of heuristics that makes quality unpredictable.
+
+The router is not a spreadsheet of model prices. It is part of the product's quality policy.
+
+## Start with workload classes
+
+Before building a router, classify the work by what the product needs from it.
+
+Useful dimensions include:
+
+- output structure;
+- reasoning depth;
+- context size;
+- tolerance for uncertainty;
+- latency requirement;
+- side-effect risk;
+- freshness requirement;
+- and acceptable cost per request.
+
+For example, a request to label an incoming event may need a fast structured response. A developer tool explaining a cross-module change needs more context and stronger evidence. A workflow that can update production data needs a higher quality threshold and possibly human approval regardless of which model is used.
+
+These classes are more stable than model names. Model names and pricing change. The product requirement remains: this task must return valid JSON within a short latency budget, while that task must cite evidence before a write is allowed.
+
+## Quality comes before price
+
+The purpose of routing is not to send as many requests as possible to the cheapest model. It is to satisfy the quality contract at the lowest reasonable cost.
+
+A cheap answer that requires a human to repair every important detail is not cheap. A fast answer that triggers a retry, a support ticket, or a wrong database update is not fast in the way the product needs.
+
+I define a minimum quality gate for each workload:
+
+- schema validation for structured output;
+- required fields present;
+- evidence links for code analysis;
+- acceptable classification confidence;
+- no prohibited content or tool arguments;
+- and a successful domain-level validation step.
+
+The router can choose a less expensive path only if the result passes the gate. Otherwise, it should escalate, ask for more context, or stop safely.
+
+Routing without quality gates is just random degradation.
+
+## Route by task, not by user mood
+
+The first routing signal should be the task itself. A model should not be selected because the prompt happens to be long or because a user sounds urgent.
+
+A typed request can describe the workload:
+
+```json
+{
+  "task": "code_analysis",
+  "risk": "medium",
+  "requiresStructuredOutput": true,
+  "requiresEvidence": true,
+  "maxLatencyMs": 15000
+}
+```
+
+The application can derive these fields from the product operation rather than asking a model to classify every request. A report summary, a document conversion, and an agent tool call should enter the system through different application paths even if they eventually use the same provider.
+
+This keeps routing explainable. When a request uses a more capable model, the system can say which requirement caused the escalation.
+
+## Confidence-based fallback needs an external check
+
+A model can report confidence, but self-reported confidence is not enough to authorize an escalation or a side effect.
+
+Useful confidence signals come from the task:
+
+- Is the output valid according to its schema?
+- Did required evidence appear?
+- Did two independent checks agree?
+- Did the result match a known pattern or test?
+- Are there unresolved fields or contradictory sources?
+- Did the model ask for information outside the available scope?
+
+For a classifier, an external score or margin may help. For a code-analysis task, evidence coverage and unresolved claims may be better signals. For an agent, policy validation and tool preconditions matter more than the model's verbal certainty.
+
+A fallback rule might look like:
+
+```text
+run the low-cost path
+validate the result
+if the result fails the quality gate:
+    add missing context or escalate to the stronger path
+if the stronger path also fails:
+    return a bounded uncertainty state
+```
+
+The final state should not be "the router kept trying until the text sounded confident." It should be a useful explanation of what could not be established.
+
+## Model cascades are not free
+
+A cascade can reduce average cost by starting with a smaller model and escalating difficult cases. It can also increase tail latency and total cost when the first model frequently fails.
+
+Before using a cascade, measure:
+
+- the percentage of requests that escalate;
+- the extra latency for escalated requests;
+- the cost of discarded first attempts;
+- the quality difference between direct strong-model calls and cascades;
+- and the user experience while escalation happens.
+
+If most requests escalate, the smaller model is acting as a slow preprocessor rather than a cost-saving route. If failures are detected only after a long generation, the router may spend more than a direct call.
+
+Escalation should ideally fail early. Schema validation, required-field checks, and evidence checks can often happen before a full downstream workflow starts.
+
+## Cache meaning, not just text
+
+Caching can make AI applications faster and cheaper, but the cache key must represent the meaning of the request.
+
+Two prompts with similar wording may require different answers because their repository revision, tenant scope, policy, model instructions, or freshness requirement differs. A semantic cache that treats them as equivalent can return a plausible answer to the wrong question.
+
+A useful cache key may include:
+
+- normalized task type;
+- relevant input values;
+- context or document revision;
+- tenant and authorization scope;
+- prompt or policy version;
+- output schema version;
+- and freshness policy.
+
+The cache should also preserve provenance. If a result is reused, the application should know when and from which inputs it was produced. Sensitive model output should have a retention policy rather than living in a cache indefinitely.
+
+Cache invalidation is especially important for code-analysis and retrieval tasks. A result tied to an old commit is not reusable simply because the new prompt looks similar.
+
+## Route context before model size
+
+Sometimes the most effective optimization is not a smaller model. It is a smaller, better context.
+
+If a request includes irrelevant documents, every model has to spend capacity distinguishing signal from noise. Improving retrieval can reduce tokens, latency, and error rate without changing the model.
+
+Routing can therefore happen in stages:
+
+1. classify the task deterministically;
+2. retrieve and filter the relevant context;
+3. select a model based on remaining complexity;
+4. validate the output;
+5. escalate only if evidence or quality is insufficient.
+
+This makes the model choice more meaningful. A smaller model with strong context can outperform a larger model receiving an unbounded repository snapshot.
+
+## Cost budgets should be visible
+
+Every AI workflow should have a cost policy, especially workflows that can loop or fan out.
+
+The budget can be defined per request, user, tenant, workflow, or time window. It should include input and output tokens, tool calls, retries, and fallback attempts.
+
+When the budget is close to its limit, the system needs a useful behavior:
+
+- reduce optional context;
+- switch to a cheaper summary path;
+- ask the user to narrow the request;
+- queue the work for later;
+- or stop with a partial but clearly labeled result.
+
+Silently truncating context can be worse than refusing the request because the user may not know which evidence disappeared.
+
+Cost controls should also prevent a single malformed request from creating a fan-out storm. Limit parallel tool calls, enforce maximum context, and make retries count against the same budget.
+
+## Latency is a quality dimension
+
+Users experience an AI feature as a workflow, not a token count. A route that is inexpensive but takes forty seconds may be unsuitable for an interactive filter. A more expensive request may be acceptable for a generated report that runs in the background.
+
+I define latency classes alongside quality classes:
+
+- interactive acknowledgement;
+- first useful partial result;
+- final answer;
+- and background completion.
+
+The interface should make the class visible. Streaming a structured plan can help a long task, but it should not imply that the final answer is ready. A background job needs durable status rather than a request that stays open until the model finishes.
+
+Routing should account for tail latency, not only the average. A model that is fast nine times out of ten may still create a poor experience if the slow tenth request blocks an important workflow.
+
+## Observe routing decisions as product behavior
+
+The router needs its own telemetry. For every request, record enough information to answer:
+
+- Which workload class was selected?
+- Which route and model were used?
+- What quality gate was applied?
+- Did the request escalate or retry?
+- What was the input size and context scope?
+- What were latency, cost, and final outcome?
+- Was the answer cached?
+
+Do not log sensitive prompts or source code simply to make routing analytics easier. Use redacted identifiers and aggregate dimensions where possible.
+
+The key metric is not only cost per request. It is cost per successful, accepted outcome. A route that is cheap but frequently rejected may be worse than a more expensive route with a higher first-pass success rate.
+
+## Test the router like a system
+
+Routing policies need regression tests. Keep a representative set of tasks with expected workload class, minimum quality, and acceptable route options.
+
+Test difficult cases:
+
+- a short prompt with high-risk side effects;
+- a long prompt with simple structured output;
+- missing context;
+- stale cached input;
+- malformed model output;
+- a provider timeout;
+- a quality gate that fails after an expensive generation;
+- and a tenant-specific policy that limits available models.
+
+The router should be evaluated on both quality and economics. A policy that improves benchmark accuracy while doubling cost may be correct for one workflow and wrong for another. A policy that lowers cost by accepting more unsupported claims is not an optimization.
+
+## Keep the policy editable
+
+Model routing changes as models, workloads, traffic, and product expectations change. Hard-coding every decision into scattered conditionals makes the policy difficult to inspect.
+
+I prefer a small explicit policy layer with named workload classes, quality gates, budgets, and escalation rules. The implementation can evolve, but the decision should remain reviewable.
+
+This also makes it possible to run a new policy in shadow mode: calculate what route it would choose without changing the current behavior, then compare quality, latency, and cost before rollout.
+
+## Routing is quality engineering
+
+Model routing is often framed as a cost-reduction technique. The deeper value is that it forces the product to say what each AI task requires.
+
+Which outputs must be structured? Which claims need evidence? Which actions require approval? How fresh must the context be? How long can the user wait? What does a safe failure look like?
+
+Once those contracts exist, model selection becomes a practical implementation choice. A small model can handle bounded work. A stronger model can handle ambiguity that justifies its cost. A cache can reuse results when the meaning and scope are unchanged. A fallback can escalate when external checks show that the first answer is not good enough.
+
+The goal is not to use the smallest model everywhere. It is to spend capability where it improves the outcome and to make every escalation explainable.

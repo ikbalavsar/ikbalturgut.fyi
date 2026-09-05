@@ -8,6 +8,7 @@ interface Props {
   description?: string
   ogType?: string
   image?: string
+  structuredData?: Record<string, unknown> | Record<string, unknown>[]
 }
 
 const {
@@ -15,9 +16,17 @@ const {
   description = "Independent notes on engineering, systems, and product craft. Building software that makes complex things clearer.",
   ogType = "website",
   image = "/og.svg",
+  structuredData,
 } = Astro.props
 
 const canonical = new URL(Astro.url.pathname, Astro.site).toString()
+const structuredDataItems = structuredData
+  ? Array.isArray(structuredData)
+    ? structuredData
+    : [structuredData]
+  : []
+const serializeStructuredData = (value: Record<string, unknown>) =>
+  JSON.stringify(value).replace(/</g, "\\u003c")
 ---
 
 <!doctype html>
@@ -26,6 +35,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site).toString()
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
+
+    {
+      structuredDataItems.map((item) => (
+        <script type="application/ld+json" set:html={serializeStructuredData(item)} />
+      ))
+    }
 
     <title>{title}</title>
     <meta name="description" content={description} />

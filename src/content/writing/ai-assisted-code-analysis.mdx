@@ -1,0 +1,210 @@
+---
+title: "AI-assisted code analysis you can actually trust"
+description: "Trustworthy code analysis needs bounded repository scope, evidence links, calibrated confidence, human review, and results that another person can reproduce."
+date: 2026-09-04
+tag: "AI systems"
+readingTime: "13 min"
+---
+
+AI-assisted code analysis is easy to demonstrate and difficult to trust.
+
+Give a model a repository and ask it to explain the architecture. It will usually return something fluent, organized, and plausible. That is enough to make a good demo. It is not enough to make a reliable developer tool.
+
+Software repositories contain ambiguity by default. A function name may no longer describe what the function does. A configuration value may change behavior in production. A test may encode a contract that the implementation does not document. A generated file may look authoritative while being overwritten on the next build. A model can produce a coherent story from incomplete evidence because coherence is not the same as correctness.
+
+The useful goal is smaller: produce a bounded analysis that shows what was inspected, connects claims to evidence, makes uncertainty visible, and gives a developer a practical way to correct it.
+
+Trust comes from the workflow around the model.
+
+## Scope the repository before asking a question
+
+The first input to a code-analysis tool should not be a prompt. It should be a scope.
+
+The scope might be:
+
+- one API route and the service it calls;
+- a pull request and the files it changes;
+- a module with its tests and configuration;
+- a command-line entry point and its dependencies;
+- or a set of files selected by the developer.
+
+Without a scope, the tool has to decide what the question means before it can answer it. That decision is often invisible. It may include a stale generated file, omit a configuration path, or consume a large amount of context on unrelated code.
+
+I prefer to make the analysis boundary visible before generation starts. Show the files, symbols, tests, and configuration sources that will be considered. Let the developer remove a file or add a missing one. This creates a useful checkpoint: the person can disagree with the context before they have to review the conclusion.
+
+Scope is also a security boundary. A tool that can analyze a repository should not automatically send every file to an external model. Ignore files, generated output, secrets, private keys, and unrelated workspaces should be excluded by default.
+
+## Evidence should travel with every important claim
+
+The difference between a useful analysis and a polished hallucination is often a link back to the source.
+
+If the tool says that an endpoint writes to a database, the result should point to the handler, service method, or query that supports the claim. If it says that an operation is protected by tenant scope, the reviewer should be able to find the authorization and query predicates. If it cannot find the evidence, it should say that the claim is inferred or unresolved.
+
+A finding might have a shape like this:
+
+```json
+{
+  "claim": "The report query is scoped by tenant and source.",
+  "evidence": [
+    {
+      "file": "src/reports/buildReportQuery.ts",
+      "line": 42,
+      "reason": "Adds tenant_id and source_id predicates."
+    }
+  ],
+  "confidence": "high",
+  "uncertainties": []
+}
+```
+
+The exact JSON is not important. The separation is. A claim, its evidence, its confidence, and its uncertainty should not be collapsed into one paragraph that a reviewer cannot decompose.
+
+Evidence also makes the tool more useful for maintenance. A document with links to the relevant implementation can be checked when the code changes. A document without links becomes another artifact someone has to distrust.
+
+## Confidence is not a feeling
+
+Many AI tools display a confidence score that is really a probability-like decoration. A number without a calibration process does not tell the reviewer what to do.
+
+Confidence should be based on observable conditions:
+
+- Was the relevant implementation found?
+- Do multiple sources agree?
+- Is the behavior covered by tests?
+- Did configuration change the conclusion?
+- Is the claim based on a direct call or an inferred relationship?
+- Was the repository complete for this question?
+
+This leads to useful categories such as direct, supported inference, unresolved, and contradicted. A direct finding can point to the exact implementation. A supported inference can explain the chain of evidence. An unresolved finding can say which file or runtime behavior is missing. A contradicted finding can show the sources that disagree.
+
+That vocabulary is more actionable than pretending every result can be assigned a precise decimal score.
+
+## Structure the analysis around developer decisions
+
+The best output is not the longest explanation. It is the one that helps the developer make a decision.
+
+For a code-review assistant, useful sections might be:
+
+- behavior changed;
+- affected contracts;
+- data or authorization boundaries;
+- failure paths;
+- missing or weak tests;
+- performance risks;
+- evidence and unresolved questions.
+
+For architecture documentation, the output may need module responsibilities, dependency direction, data flow, configuration inputs, and operational assumptions. For onboarding, the useful answer is different again: where to start, which commands matter, and which concepts a new contributor must understand first.
+
+One universal prompt cannot produce all of these reliably. The task definition should choose the output shape before the model sees the repository.
+
+## Separate observation from interpretation
+
+A trustworthy tool distinguishes what it saw from what it concluded.
+
+Observation:
+
+> `ReportService` calls `buildWhereClause` with `tenantId` and `sourceId`.
+
+Interpretation:
+
+> Reports are probably scoped to tenant and source.
+
+The interpretation may be correct, but it can fail if another code path bypasses the service, if the query builder drops one value, or if the identifiers are not authorization boundaries at all. A good analysis includes both levels and makes the jump visible.
+
+This is especially important for business logic. Code can show that a condition exists, but it may not prove that the condition matches the product's intended definition. The model should not turn an implementation detail into a product truth without labeling the inference.
+
+## Human review should be narrow and useful
+
+Human review is not a final approval button at the bottom of a long generated document. It should be designed around the parts most likely to be wrong.
+
+The reviewer should be able to:
+
+- open the evidence for a claim;
+- mark a finding as correct, incorrect, or incomplete;
+- add missing context;
+- exclude a generated or irrelevant file;
+- accept one section without accepting the whole document;
+- and regenerate only the affected part.
+
+This creates a better feedback loop than asking the model to rewrite everything after one correction. It also preserves the developer's contribution. Approved documentation should not lose its human edits every time the repository is analyzed again.
+
+The review surface can be simple. Even a Markdown document with line links, confidence labels, and an unresolved-questions section is more useful than a polished page that hides its sources.
+
+## Reproducibility is part of trust
+
+If two developers run the same analysis and receive completely different conclusions, the tool is hard to use in a team.
+
+Perfect determinism is not always possible, but the analysis should record enough metadata to explain the result:
+
+- repository revision or commit;
+- included and excluded paths;
+- analysis task and output schema version;
+- model and configuration used;
+- retrieval or symbol-selection strategy;
+- tool versions;
+- and any human edits made after generation.
+
+When a result changes, the team should be able to distinguish a code change from a context change, a prompt change, a model change, or a retrieval bug.
+
+Reproducibility also helps with review. If an AI-generated summary appears in a pull request, a future reader should know which version of the code it described. Otherwise, the summary can remain attached to a diff while its evidence silently changes underneath it.
+
+## Evaluate the artifact, not the prose
+
+AI analysis needs an evaluation set made from real developer questions, not only synthetic prompts.
+
+For each task, define what a good answer must contain. An API analysis may need the correct route, validation rules, side effects, error paths, and evidence links. A security review may need to identify a missing scope predicate. An onboarding document may need to point to the correct setup command and avoid claiming that an optional service is required.
+
+Useful evaluation dimensions include:
+
+- factual accuracy;
+- evidence correctness;
+- important omission rate;
+- unsupported-claim rate;
+- reviewer correction time;
+- reproducibility across runs;
+- and usefulness for the actual task.
+
+The omission rate matters because a confident answer that misses the only dangerous branch can be worse than a cautious answer with visible gaps. Evaluation should include incomplete repositories, confusing names, stale documentation, feature flags, generated files, and conflicting implementations.
+
+## Protect sensitive context
+
+Code analysis can expose secrets and private information more easily than a normal chat interaction because the tool is built to inspect many files at once.
+
+The safe default is to minimize context. Use explicit allowlists where possible. Respect repository ignore rules but do not treat them as a complete security policy. Scan for credentials and private keys before external model calls. Redact values that are not required to answer the task. Record which content left the environment.
+
+The user should also understand whether the model provider retains prompts, whether the output is used for training, and whether the tool sends source code or only derived metadata. These are not legal footnotes. They determine whether the tool can be used on a given repository.
+
+## A practical analysis pipeline
+
+A production-oriented code-analysis workflow can remain straightforward:
+
+1. Receive a task with a declared scope.
+2. Resolve the repository revision.
+3. Build a file and symbol inventory.
+4. Apply exclusions and secret checks.
+5. Select context for the task.
+6. Ask for a typed result with evidence and uncertainty.
+7. Validate the output against its schema.
+8. Check that referenced files and lines exist.
+9. Present findings for targeted human review.
+10. Store the result with revision and configuration metadata.
+
+The model should not be responsible for steps that ordinary software can verify. A parser can check whether a file exists. A schema validator can reject malformed output. A link checker can detect stale line references. A deterministic preprocessor can remove ignored paths.
+
+The more validation happens outside the model, the smaller the trust burden becomes.
+
+## Trust is a system property
+
+An AI code-analysis tool becomes trustworthy through a chain of modest decisions:
+
+- the scope is explicit;
+- the context is safe and relevant;
+- claims point to evidence;
+- confidence reflects the evidence available;
+- observations are separated from interpretations;
+- human review is granular;
+- results are reproducible;
+- and evaluation measures omissions as well as fluent answers.
+
+None of these guarantees that the model will never be wrong. They make wrongness visible, local, and correctable.
+
+That is the standard I want from AI-assisted developer tools. They should not pretend to understand a codebase by producing a confident summary. They should help a developer inspect the right evidence faster, preserve what has been verified, and make the remaining uncertainty impossible to miss.

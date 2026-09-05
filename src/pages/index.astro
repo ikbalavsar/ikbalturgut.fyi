@@ -2,55 +2,28 @@
 import { getCollection } from "astro:content"
 import BaseLayout from "@/layouts/BaseLayout.astro"
 import Hero from "@/components/Hero.astro"
-import WorkCard from "@/components/WorkCard.astro"
 import WritingList from "@/components/WritingList.astro"
 import FieldNotes from "@/components/FieldNotes.astro"
-
-const work = (await getCollection("work", ({ data }) => data.featured)).sort(
-  (a, b) => a.data.order - b.data.order,
-)
+import { site } from "@/config"
 
 const writing = (await getCollection("writing", ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 4)
   .map((entry) => ({ slug: entry.id, ...entry.data }))
-
-const variants = ["wide", "standard", "tall"] as const
 ---
 
-<BaseLayout>
+<BaseLayout
+  structuredData={{
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${site.url}/#website`,
+    url: site.url,
+    name: site.name,
+    description: site.tagline,
+    publisher: { "@id": `${site.url}/#person` },
+  }}
+>
   <Hero />
-
-  <!-- Selected work -->
-  <section id="work" class="section">
-    <div class="shell">
-      <div class="section-head">
-        <h2>Selected work</h2>
-        <span class="mono-label">03 projects</span>
-      </div>
-
-      <div class="work-grid">
-        {
-          work.map((entry, i) => (
-            <div class={`work-cell work-cell--${i}`}>
-              <WorkCard
-                index={entry.data.index}
-                title={entry.data.title}
-                category={entry.data.category}
-                outcome={entry.data.outcome}
-                role={entry.data.role}
-                scope={entry.data.scope}
-                year={entry.data.year}
-                accent={entry.data.accent}
-                href={`/work/${entry.id}`}
-                variant={variants[i] ?? "standard"}
-              />
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
 
   <!-- Latest writing -->
   <section id="writing-preview" class="section">
@@ -74,30 +47,3 @@ const variants = ["wide", "standard", "tall"] as const
     </div>
   </section>
 </BaseLayout>
-
-<style>
-  .work-grid {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: clamp(1.5rem, 3vw, 3rem) clamp(1.5rem, 3vw, 2.5rem);
-  }
-  /* Asymmetric Swiss grid: first item wide, then two offset */
-  .work-cell--0 {
-    grid-column: 1 / span 7;
-  }
-  .work-cell--1 {
-    grid-column: 8 / span 5;
-    align-self: end;
-  }
-  .work-cell--2 {
-    grid-column: 3 / span 7;
-  }
-
-  @media (max-width: 820px) {
-    .work-cell--0,
-    .work-cell--1,
-    .work-cell--2 {
-      grid-column: 1 / -1;
-    }
-  }
-</style>

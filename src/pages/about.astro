@@ -6,6 +6,15 @@ import { site } from "@/config"
 <BaseLayout
   title="About — Ikbal Turgut"
   description="An engineering practice focused on making complex software clearer."
+  structuredData={{
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": `${site.url}/#person`,
+    name: site.name,
+    url: `${site.url}/about`,
+    jobTitle: "Full Stack Developer",
+    sameAs: [site.social.github, site.social.linkedin],
+  }}
 >
   <header class="page-head section">
     <div class="shell">

@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from "astro:content"
 import BaseLayout from "@/layouts/BaseLayout.astro"
+import { site } from "@/config"
 
 export async function getStaticPaths() {
   const entries = await getCollection("writing", ({ data }) => !data.draft)
@@ -15,18 +16,55 @@ const { Content } = await render(entry)
 
 const fmt = (d: Date) =>
   d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+
+const canonical = new URL(Astro.url.pathname, Astro.site).toString()
+const articleSchema = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "@id": `${canonical}#article`,
+  headline: entry.data.title,
+  description: entry.data.description,
+  datePublished: entry.data.date.toISOString(),
+  author: {
+    "@type": "Person",
+    "@id": `${site.url}/#person`,
+    name: site.name,
+    url: `${site.url}/about`,
+  },
+  publisher: { "@id": `${site.url}/#person` },
+  image: new URL("/og.svg", Astro.site).toString(),
+  inLanguage: "en",
+  articleSection: entry.data.tag,
+  mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
+  isPartOf: { "@id": `${site.url}/#website` },
+}
+
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: site.name, item: site.url },
+    { "@type": "ListItem", position: 2, name: "Writing", item: `${site.url}/writing` },
+    { "@type": "ListItem", position: 3, name: entry.data.title, item: canonical },
+  ],
+}
 ---
 
 <BaseLayout
   title={`${entry.data.title} — Ikbal Turgut`}
   description={entry.data.description}
   ogType="article"
+  structuredData={[articleSchema, breadcrumbSchema]}
 >
   <article class="article">
     <div class="shell">
-      <a href="/writing" class="back textlink">
-        <span class="arrow">&#8592;</span> All writing
-      </a>
+      <nav class="back breadcrumbs" aria-label="Breadcrumb">
+        <a href="/" class="textlink">Home</a>
+        <span aria-hidden="true">/</span>
+        <a href="/writing" class="textlink">Writing</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">{entry.data.title}</span>
+      </nav>
 
       <header class="article-head">
         <div class="article-meta">
@@ -58,6 +96,19 @@ const fmt = (d: Date) =>
   }
   .back {
     margin-bottom: clamp(2rem, 5vw, 3.5rem);
+  }
+  .breadcrumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+  }
+  .breadcrumbs [aria-current="page"] {
+    max-width: 42ch;
   }
   .article-head {
     max-width: 65ch;

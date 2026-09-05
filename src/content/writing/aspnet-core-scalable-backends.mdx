@@ -1,0 +1,185 @@
+---
+title: "What scaling an ASP.NET Core backend actually requires"
+description: "Scalable backend systems are built from explicit boundaries, predictable work, resilient data access, and enough observability to explain failure."
+date: 2026-09-05
+tag: "backend systems"
+readingTime: "13 min"
+---
+
+Scaling an ASP.NET Core backend is often described as a hosting problem. Add more instances, put them behind a load balancer, increase the database size, and keep watching the graphs.
+
+Those things can be necessary. They are rarely sufficient.
+
+A backend scales when its work remains understandable as demand grows. Requests have clear boundaries. Data access does not multiply accidentally. Slow dependencies cannot occupy every worker indefinitely. Caches have a defined meaning. Failures are isolated instead of amplified. The system can explain what happened after a request crosses several services and storage layers.
+
+The framework gives a strong foundation, but it does not decide these boundaries for you. That is application design work.
+
+## Start with the workload
+
+The first scaling mistake is treating traffic as one number. Two systems with the same requests per second may have completely different problems.
+
+One endpoint may read a small record by key. Another may calculate a report across millions of events. One request may be independent and cacheable. Another may update several related tables and publish a message. Average throughput hides these differences.
+
+Before choosing an optimization, I try to describe the workload in terms of:
+
+- read and write proportions;
+- request size and response size;
+- database work per request;
+- dependency calls per request;
+- expected burst behavior;
+- freshness requirements;
+- acceptable delay and failure behavior.
+
+This turns "the API is slow" into a more useful statement. For example: "the report endpoint performs three unbounded queries after every filter change, and the slowest query holds a connection for most of the request." That statement points toward a design decision. A generic scaling statement does not.
+
+## Keep the request pipeline boring
+
+The HTTP request pipeline is the part of the system that every request passes through. It should be easy to explain.
+
+Authentication, authorization, request validation, logging, exception handling, and response shaping all belong there, but each layer should have a narrow responsibility. Middleware that quietly performs expensive data access or makes decisions about unrelated business rules becomes difficult to reason about under load.
+
+I prefer a request path that reads like a sequence:
+
+1. Parse the request.
+2. Validate its shape and allowed values.
+3. Establish the caller and resource scope.
+4. Execute the application operation.
+5. Map the result into a stable response.
+6. Record the outcome and timing.
+
+This structure is not about ceremony. It gives failures a location. A rejected query parameter is different from a missing permission, a database timeout, and an unexpected application exception. When those states are flattened into one generic error, the client cannot respond well and the operator cannot diagnose efficiently.
+
+## Boundaries matter more than layers
+
+Most ASP.NET Core applications have controllers, services, and repositories. The names are less important than the boundaries between them.
+
+A controller should not need to know how a report is computed. A query builder should not decide which tenant the caller may access. A data executor should not silently invent default filters. Each layer should receive the context it needs and no more.
+
+For a multi-tenant operation, I want the scope to be explicit in the application flow:
+
+```csharp
+public sealed record ReportScope(
+    Guid TenantId,
+    Guid SourceId,
+    DateOnly From,
+    DateOnly To);
+```
+
+The point is not the record itself. The point is that a report query should not receive a loose dictionary of values and hope every consumer interprets it correctly. A typed scope makes missing boundaries harder to ignore and makes tests easier to write.
+
+The same principle applies to permissions, attribution models, and freshness modes. If a value changes what the answer means, it should be visible in the operation's input.
+
+## Async is not a performance spell
+
+Asynchronous APIs are essential for scalable I/O-bound applications, but adding `async` everywhere does not automatically make a backend faster.
+
+The useful question is whether the request can release its thread while waiting on a database, network call, or other asynchronous operation. If the underlying work is still blocking, wrapping it in a task only changes the shape of the code. If several independent calls must happen, running them concurrently can reduce latency, but only when the dependencies and connection pool can tolerate the concurrency.
+
+Unbounded concurrency is a failure mode. A request that starts twenty downstream operations may look fast in a quiet environment and become destructive during a traffic spike. I prefer an explicit limit and a clear fallback when the dependency is slow.
+
+Cancellation also matters. If the client has disconnected or the request deadline has expired, work that cannot contribute to a response should stop where possible. Cancellation is not a substitute for timeouts, but it prevents abandoned work from consuming resources indefinitely.
+
+The goal is not maximum parallelism. It is useful work that ends when the request no longer needs it.
+
+## Make data access predictable
+
+Database performance is often the first real scaling limit. The problem is not always a missing index. It can be the shape of the application query.
+
+I look for:
+
+- queries performed inside loops;
+- repeated lookups for the same related records;
+- accidental loading of full entities when only a few fields are needed;
+- pagination that uses an unstable order;
+- filters applied after a large result has already been loaded;
+- count and list queries that use different predicates;
+- transactions that remain open while unrelated work runs.
+
+The fix starts by defining the result the endpoint actually needs. A reporting endpoint should not load a complete domain graph just to calculate three numbers. A list endpoint should not return an unbounded collection because the first screen only displays twenty rows.
+
+Query code should also make scope visible. A query that accepts `tenantId`, `sourceId`, and a date range should apply those predicates consistently to every related table. Repeating a boundary in several query paths is not elegant, but silently dropping it is worse. Shared builders or carefully tested query helpers can reduce drift.
+
+## Use caching as a contract
+
+Caching is often introduced as a reaction to a slow endpoint. That is understandable, but a cache is not free speed. It is a decision about identity, freshness, and invalidation.
+
+Before caching a response, I want clear answers to four questions:
+
+1. What inputs make two responses equivalent?
+2. How long can the response be stale?
+3. What event makes the cached value invalid?
+4. What should happen when the cache is unavailable?
+
+The cache key must include every input that changes the answer. In a scoped analytics system, that may include tenant, source, date range, report type, and consent mode. Omitting one boundary can turn a performance optimization into a data isolation bug.
+
+The application should also work when the cache is cold or temporarily unavailable. A cache failure may increase latency, but it should not change authorization or silently return a value from the wrong scope.
+
+Caching is successful when its behavior can be explained, not merely when its hit rate is high.
+
+## Timeouts and retries need a budget
+
+An HTTP request has a finite amount of time in which it can be useful. Every dependency call spends part of that budget.
+
+If a request waits for a database for thirty seconds, retries a failed API call twice, and then calls a second dependency, the total behavior is not resilient. It is a long queue of uncertainty. Under load, those waits occupy connections and workers until the whole system becomes slower.
+
+I set timeouts at the boundary where work leaves the process and decide which failures are retryable. Retries are appropriate for some transient failures, not for validation errors, authorization failures, or overloaded dependencies that are already asking for less traffic. A retry policy should include a limit and backoff, and it should respect the overall request deadline.
+
+When a dependency cannot respond, the endpoint should have a deliberate outcome:
+
+- return a partial result if the missing part is optional;
+- serve a clearly labeled cached result;
+- enqueue the work for later completion;
+- or fail quickly with an actionable error.
+
+"Try again" is not a failure strategy unless the caller knows when and why to try again.
+
+## Separate synchronous work from background work
+
+Not everything needs to finish before the HTTP response. Generating a large export, recalculating a report, sending a notification, or processing a batch can often become a background operation.
+
+The boundary needs to be explicit. The API should create a durable job, return a status the client understands, and provide a way to observe completion or failure. A background worker should be idempotent where possible and record enough state to resume after interruption.
+
+The opposite mistake is also common: moving work to a background queue to hide a slow design without defining delivery guarantees. A queue does not remove complexity. It moves the complexity into retries, duplicate delivery, ordering, dead-letter handling, and user-visible status.
+
+Background processing is valuable when the product can honestly model eventual completion.
+
+## Make failures observable by operation
+
+Logs are most useful when they describe an operation rather than merely printing a message. I want a request or correlation identifier, the operation name, the scoped resource, dependency timings, cache behavior, and the final outcome.
+
+Sensitive values should never be logged just because they make debugging easier. The goal is to explain the path, not to copy the data.
+
+Metrics should answer questions such as:
+
+- Which endpoint is slow for which operation type?
+- Are failures caused by validation, authorization, dependency timeouts, or application errors?
+- Is the database connection pool exhausted?
+- Did a new cache key increase cardinality?
+- Are retries helping or amplifying traffic?
+
+Without these dimensions, teams optimize averages and miss the small but important class of requests that users experience as broken.
+
+## Test the boundaries, not just the methods
+
+Unit tests are useful for business rules, query construction, and response mapping. Scalable behavior also needs tests around boundaries:
+
+- a request cannot read another tenant's data;
+- a missing source or invalid date range is rejected consistently;
+- cancellation stops expensive downstream work;
+- timeouts produce the intended response;
+- retries do not repeat non-idempotent operations;
+- pagination has stable ordering;
+- list and count endpoints agree on filters;
+- cache keys separate all answer-changing inputs.
+
+These tests encode the contracts that are easy to break during refactoring. They are more valuable than a large number of tests that only prove a happy-path controller can call a mocked service.
+
+## Scaling is a clarity problem
+
+The most scalable ASP.NET Core backends are not necessarily the ones with the most sophisticated infrastructure. They are the ones where the work is visible.
+
+The request has a clear scope. The data access has bounded cost. Async operations can be cancelled. Caches have an identity and freshness contract. Retries have a budget. Background jobs have a durable state. Failures carry enough context to be investigated.
+
+Once those properties exist, adding instances or increasing capacity becomes useful because the application is ready to use the extra resources predictably. Without them, more capacity often delays the same failure while making it harder to see.
+
+Scaling is therefore less about making every component clever and more about making every boundary honest. Boring request paths, explicit data contracts, and observable failure modes are not limitations. They are what let a backend keep working when the system becomes larger than the original design.

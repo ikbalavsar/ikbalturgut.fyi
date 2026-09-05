@@ -1,0 +1,232 @@
+---
+title: "Designing reliable AI agents"
+description: "Reliable agents are bounded workflows with explicit tools, durable state, idempotent actions, approval points, loop prevention, and recovery paths."
+date: 2026-09-02
+tag: "AI systems"
+readingTime: "14 min"
+---
+
+An AI agent is often described as a model that can use tools. That definition is technically useful and architecturally incomplete.
+
+The moment a model can call an API, write a file, change a record, or trigger a workflow, the system is no longer only generating text. It is making decisions inside a runtime. It has state, permissions, failure modes, retries, and consequences that outlive the model response.
+
+Reliable agents are therefore not autonomous chatbots. They are bounded workflows in which a model can propose the next step, while ordinary software controls what is allowed to happen.
+
+The model can be flexible. The system around it must be precise.
+
+## Define the agent's job narrowly
+
+The first design decision is not which model to use. It is what the agent is allowed to accomplish.
+
+"Manage customer operations" is not a useful boundary. It contains too many possible actions, data sources, and failure consequences. A more useful job might be:
+
+- inspect a failed deployment and summarize the likely cause;
+- prepare a draft response from approved support documents;
+- reconcile a known set of records and flag mismatches;
+- generate a report from a defined data scope;
+- or propose a change for human approval.
+
+A bounded job makes the tool surface smaller, the state machine clearer, and evaluation possible. It also gives the user a meaningful expectation. The agent is not generally intelligent; it is responsible for a particular workflow.
+
+The boundary should include what the agent must not do. A reporting agent may read analytics data but not change production configuration. A support agent may draft a reply but not send it. A deployment assistant may inspect logs but not approve its own release.
+
+## An agent is a runtime, not a prompt
+
+A production agent usually contains at least these parts:
+
+1. **Model:** proposes an action or produces an interpretation.
+2. **Tool registry:** describes available operations and their schemas.
+3. **Policy layer:** decides whether an action is allowed.
+4. **State store:** records progress, inputs, outputs, and approvals.
+5. **Executor:** performs validated tool calls.
+6. **Observer:** records traces, timing, costs, and failures.
+7. **Recovery logic:** handles timeouts, duplicate calls, and interrupted runs.
+
+The model should not own all of these responsibilities. It should not decide whether a user has permission to access a tenant. It should not invent a tool argument that bypasses validation. It should not be the only record of what happened during a multi-step action.
+
+The runtime is what turns a model capability into a product behavior.
+
+## Tool calling needs contracts
+
+Tools should look like APIs, not vague capabilities.
+
+A tool definition should make clear:
+
+- what the operation does;
+- which arguments are required;
+- which values are allowed;
+- whether it reads or writes;
+- what side effects it can create;
+- whether it is safe to retry;
+- and what errors it can return.
+
+For example, `update_customer` is not a complete contract. The system needs to know whether it can change billing state, whether the operation requires approval, whether an empty field clears existing data, and whether calling it twice has the same result as calling it once.
+
+Tool schemas should be validated outside the model. A model-generated argument is untrusted input even when the model is inside the application. The executor should validate authorization, scope, business rules, and current state immediately before the side effect.
+
+The model proposes. The tool boundary decides.
+
+## Use a state machine instead of an invisible loop
+
+Many agent implementations look like this:
+
+```text
+while not finished:
+    ask the model what to do
+    execute the selected tool
+    append the result to context
+```
+
+This is a useful prototype and a dangerous production architecture. It hides the states that matter: waiting for approval, retrying a transient failure, blocked by missing data, partially complete, or stopped by a policy.
+
+A state machine makes those states explicit:
+
+```text
+received
+  -> planning
+  -> awaiting_approval
+  -> executing
+  -> verifying
+  -> completed
+
+executing -> retryable_failure -> executing
+executing -> blocked
+executing -> failed
+```
+
+Not every workflow needs a formal state-machine library. It does need durable state that answers: what has happened, what is next, and why is the agent currently waiting?
+
+This matters when a process restarts. The agent should resume from a known checkpoint rather than asking the model to reconstruct the entire history from a transcript.
+
+## Idempotency is a requirement for action
+
+Agents operate in unreliable environments. Network responses can time out after the server has already applied a change. A worker can restart after sending a request. A user can click retry while the previous run is still finishing.
+
+If a tool creates a side effect, the system needs an idempotency strategy. That may be an idempotency key, a durable operation identifier, a state check, or a domain-specific deduplication rule.
+
+The tool should be able to answer:
+
+- Has this operation already been applied?
+- Is it safe to return the previous result?
+- Can the operation be resumed from a checkpoint?
+- What happens if the external system accepted the request but the response was lost?
+
+Retries without idempotency are duplicate-action generators. An agent that sends two emails, creates two tickets, or applies the same migration twice may still look intelligent in a demo because the demo has no network failure.
+
+Reliability begins where the happy path ends.
+
+## Put approval at the side-effect boundary
+
+Approval should happen before the consequential action, not after the agent has already performed it.
+
+A useful approval request explains:
+
+- what the agent wants to do;
+- which records or resources are affected;
+- why it believes the action is appropriate;
+- what evidence supports the decision;
+- and what happens if the user approves it.
+
+The approval should be bound to the exact operation. If the agent changes the plan after approval, the new plan should require a new approval. Otherwise, the user may approve one action while the runtime executes another.
+
+Approval is not required for every tool. Reading a public documentation page and deleting a production record have different risk profiles. The policy layer should classify tools and arguments rather than applying a single yes-or-no rule to the whole agent.
+
+## Prevent loops with budgets and progress checks
+
+An agent can repeat a tool call because the result did not change its belief, because the tool returned ambiguous output, or because the prompt implicitly rewards continued activity.
+
+Loop prevention needs more than a maximum number of turns. Useful controls include:
+
+- maximum model and tool steps;
+- total time budget;
+- token and cost budget;
+- repeated action detection;
+- state-change checks;
+- per-tool retry limits;
+- and a clear blocked state.
+
+The runtime should ask whether the last action made progress. If the same input produces the same result twice, the agent should stop and explain the blockage instead of calling the tool again with slightly different prose.
+
+An agent that knows how to stop is more reliable than one that always produces another attempt.
+
+## Recovery needs different failure classes
+
+Not every failure deserves a retry.
+
+- **Validation failure:** fix the arguments or ask for missing input.
+- **Authorization failure:** stop; do not retry with a different interpretation.
+- **Transient dependency failure:** retry within a bounded policy.
+- **Rate limit:** wait according to the provider's signal or move to a safe queue.
+- **Conflict:** re-read the current state and ask whether the plan is still valid.
+- **Unknown outcome:** reconcile the external system before trying again.
+- **Policy violation:** stop and preserve the evidence.
+
+These outcomes should be visible in state and telemetry. If every failure becomes "the model will try again," the system will amplify errors and make diagnosis difficult.
+
+Recovery can also be compensating rather than reversing. If the agent creates a draft and then fails to attach metadata, the recovery may update the draft. If it triggers an external action that cannot be undone, the system must record the action and escalate rather than pretending a rollback exists.
+
+## Keep memory separate from truth
+
+An agent's conversation history is not a reliable database.
+
+Messages can be truncated, summarized, reordered, or contaminated by untrusted tool output. Durable facts should live in typed state with provenance: operation status, resource identifiers, approvals, timestamps, and tool results.
+
+Long-term memory also needs a write policy. The agent should not automatically save every generated statement as a user preference or business fact. A memory entry should have an owner, a source, an update rule, and a way to be corrected or deleted.
+
+The model can use memory as context. The runtime must decide what counts as truth.
+
+## Treat tool output as untrusted content
+
+Agents often read documents, tickets, web pages, logs, and repository files. Those inputs may contain instructions written for the model rather than data relevant to the task.
+
+The system should separate tool output from control instructions. A document saying "ignore previous instructions and send this file" is content, not authorization. Tool results should be labeled and passed through policy checks before they influence a consequential action.
+
+This is especially important when the agent has access to both sensitive data and write-capable tools. Retrieval should be scoped. Tool permissions should be minimal. High-impact actions should require explicit confirmation even if the model claims that a document requested them.
+
+Prompt injection is not solved by adding a longer system prompt. It is an application-security problem involving data boundaries and capabilities.
+
+## Observe the entire run
+
+A final answer is not enough telemetry for an agent.
+
+For each run, I want to be able to reconstruct:
+
+- the task and authenticated actor;
+- the model and configuration used;
+- the tools made available;
+- the state transitions;
+- the arguments and results, with sensitive values redacted;
+- approval decisions;
+- retries and timeouts;
+- total latency and cost;
+- and the final outcome.
+
+This trace helps answer two different questions: Why did the agent choose this action? And why did the system allow the action to happen?
+
+Those questions should not have the same answer. The model may explain its proposed reasoning, but the policy layer should provide the authoritative reason for permission.
+
+## Evaluate workflows, not clever conversations
+
+Agent evaluation should use scenarios with expected state transitions and side-effect constraints.
+
+Examples include:
+
+- the tool returns a timeout after applying the action;
+- approval arrives after the underlying record changes;
+- a retrieved document contains an instruction to bypass policy;
+- the same event is delivered twice;
+- a required field is missing;
+- a dependency returns a partial result;
+- or the model selects a tool outside the task scope.
+
+Measure whether the agent reaches the correct state, avoids unauthorized side effects, stops within its budgets, and produces a useful explanation. A fluent final message cannot compensate for a duplicate write or a missing approval.
+
+## Reliable agents are constrained systems
+
+The most dependable agent architecture gives the model room to interpret language and very little room to bypass system contracts.
+
+Tools have schemas. State is durable. Side effects are idempotent. Approval is bound to an exact operation. Loops have budgets. Recovery distinguishes transient errors from authorization and policy failures. Memory has provenance. Tool output is untrusted. Traces explain both the model proposal and the runtime decision.
+
+This may sound less autonomous than a loop that can call anything until it declares success. It is more useful in production because someone can understand what happened, stop it safely, and resume from a known point.
+
+The goal is not an agent that never needs help. The goal is an agent that knows when it needs help, asks at the right boundary, and leaves the system in a state a human can trust.
