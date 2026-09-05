@@ -1,0 +1,138 @@
+---
+import { getCollection } from "astro:content"
+import BaseLayout from "@/layouts/BaseLayout.astro"
+import NoteList from "@/components/NoteList.astro"
+import { site } from "@/config"
+
+const notes = (await getCollection("notes", ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+  .map((entry) => ({ slug: entry.id, ...entry.data }))
+
+const tags = [...new Set(notes.map((note) => note.tag))]
+const collectionSchema = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "@id": `${site.url}/notes#collection`,
+  url: `${site.url}/notes`,
+  name: "Notes — Ikbal Turgut",
+  description: "Short observations, experiments, and principles from an engineering practice.",
+  isPartOf: { "@id": `${site.url}/#website` },
+  mainEntity: {
+    "@type": "ItemList",
+    itemListElement: notes.map((note, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: note.title,
+      url: `${site.url}/notes/${note.slug}`,
+    })),
+  },
+}
+
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: site.name, item: site.url },
+    { "@type": "ListItem", position: 2, name: "Notes", item: `${site.url}/notes` },
+  ],
+}
+---
+
+<BaseLayout
+  title="Notes — Ikbal Turgut"
+  description="Short observations, experiments, and principles from an engineering practice."
+  structuredData={[collectionSchema, breadcrumbSchema]}
+>
+  <header class="page-head section">
+    <div class="shell">
+      <span class="mono-label">The notes</span>
+      <h1 class="page-title font-serif">Small observations from the work.</h1>
+      <p class="page-lede">
+        Shorter thoughts on naming, performance, infrastructure, data, and the decisions that
+        become clearer after shipping.
+      </p>
+    </div>
+  </header>
+
+  <section class="section notes-archive">
+    <div class="shell">
+      <nav class="notes-nav" aria-label="Note categories">
+        <button type="button" class="notes-nav__link" data-note-filter="all" aria-pressed="true">
+          All notes <span class="mono-label">{notes.length}</span>
+        </button>
+        {tags.map((tag) => (
+          <button type="button" class="notes-nav__link" data-note-filter={tag} aria-pressed="false">
+            {tag} <span class="mono-label">{notes.filter((note) => note.tag === tag).length}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div id="all" class="notes-archive__list">
+        <NoteList items={notes} />
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-head {
+    border-top: none;
+    padding-bottom: 0;
+  }
+  .page-title {
+    max-width: 16ch;
+    margin-top: 1.25rem;
+    font-size: clamp(2.4rem, 5.5vw, 4rem);
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+  .page-lede {
+    max-width: 52ch;
+    margin-top: 1.5rem;
+    color: var(--ink-70);
+    font-size: clamp(1rem, 1.5vw, 1.15rem);
+  }
+  .notes-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    margin-bottom: clamp(2.5rem, 6vw, 5rem);
+    border-top: var(--rule-strong);
+    padding-top: 1rem;
+  }
+  .notes-nav__link {
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--ink-70);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+  .notes-nav__link:hover {
+    color: var(--cobalt);
+  }
+  .notes-nav__link[aria-pressed="true"] {
+    color: var(--ink);
+  }
+</style>
+
+<script>
+  const filterButtons = document.querySelectorAll<HTMLButtonElement>("[data-note-filter]")
+  const noteItems = document.querySelectorAll<HTMLElement>("[data-note-tag]")
+
+  filterButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const filter = button.dataset.noteFilter
+
+      filterButtons.forEach((candidate) => {
+        candidate.setAttribute("aria-pressed", String(candidate === button))
+      })
+      noteItems.forEach((item) => {
+        item.hidden = filter !== "all" && item.dataset.noteTag !== filter
+      })
+    })
+  })
+</script>

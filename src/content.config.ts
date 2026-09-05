@@ -16,6 +16,19 @@ const writing = defineCollection({
   }),
 })
 
+const notes = defineCollection({
+  loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/notes" }),
+  schema: z.object({
+    title: z.string(),
+    summary: z.string(),
+    date: z.coerce.date(),
+    tag: z.string(),
+    relatedWriting: z.array(z.string()).default([]),
+    readingTime: z.string().optional(),
+    draft: z.boolean().default(false),
+  }),
+})
+
 const work = defineCollection({
   loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/work" }),
   schema: z.object({
@@ -33,4 +46,4 @@ const work = defineCollection({
   }),
 })
 
-export const collections = { writing, work }
+export const collections = { writing, notes, work }

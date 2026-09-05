@@ -1,0 +1,22 @@
+---
+title: "Every migration needs a road back"
+summary: "Writing the reverse path forces a team to understand compatibility, information loss, and the data that must survive a failed release."
+date: 2026-08-27
+tag: "experiment"
+relatedWriting: ["reversible-migrations", "testing-backend-systems"]
+readingTime: "4 min"
+---
+
+I try to write migrations so that a release can be paused without turning recovery into a meeting. That does not mean every change needs a magical `down` script. It means the team should know which part can be reversed, which part can only be compensated for, and which data would be lost by moving forward.
+
+## Reversibility is a design exercise
+
+Adding a nullable column is usually easier to reverse than deleting an old one. Copying data into a new representation may be reversible if the original remains available. Merging two records or discarding structured information is different: the SQL statement may be undoable while the meaning is not.
+
+The expand-migrate-contract sequence makes these differences visible. Add the new shape, deploy readers that understand both versions, backfill with progress and mismatch metrics, switch writes, and remove the old shape only after the compatibility window closes.
+
+## A rollback plan includes people and signals
+
+The technical steps are only part of the road back. Someone needs to know which metric indicates a bad migration, which feature flag changes the read path, and what action is safe when old and new data disagree.
+
+A migration is ready when the system can move forward carefully and stop safely. That is a more useful definition of reversible than whether the framework generated a reverse SQL file.

@@ -1,0 +1,24 @@
+---
+title: "Latency budgets are design tools"
+summary: "The 200ms budget is not only an SRE metric; it shapes what the interface can promise and when it should ask the user to wait."
+date: 2026-09-05
+tag: "principle"
+relatedWriting: ["dashboard-performance", "aspnet-core-scalable-backends"]
+readingTime: "3 min"
+---
+
+A latency budget is often introduced as a number on an operations dashboard. The page must load in two seconds. The API should respond in 200 milliseconds. The query should stay below a certain threshold.
+
+Those numbers become more useful when they are treated as design constraints rather than post-release scorecards. If the first useful answer has 200ms available, the product has to decide what deserves that time. It cannot spend the entire budget rendering a decorative shell and then ask the user to wait for the information they came to see.
+
+## Spend time where uncertainty falls
+
+The first response does not need to contain every detail. It needs to reduce uncertainty. A dashboard may show the selected time range and one reliable headline metric before loading secondary breakdowns. A search experience may return the first stable results while enrichment continues. A form may acknowledge the action before refreshing a large history table.
+
+This is not an excuse for vague loading states. It is a reason to define the first meaningful state precisely. What can the user understand? What is still being calculated? Which parts may be stale?
+
+## Budgets reveal architecture
+
+Once the product names the first useful state, the architecture becomes easier to question. A slow page may need a narrower default query, a different API response shape, a cache boundary, or a precomputed projection. It may not need a new frontend library.
+
+I like latency budgets because they make trade-offs visible early. They connect the database query, the network boundary, and the interface hierarchy. Performance stops being a final score and becomes a way to decide what the product should promise.

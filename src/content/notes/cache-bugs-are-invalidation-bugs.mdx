@@ -1,0 +1,24 @@
+---
+title: "Most cache bugs are invalidation bugs"
+summary: "A cache can make a correct answer fast, but it cannot decide by itself when that answer stopped being true."
+date: 2026-08-31
+tag: "bookmark"
+relatedWriting: ["dashboard-performance", "aspnet-core-scalable-backends"]
+readingTime: "3 min"
+---
+
+Caching conversations often start with hit rate and latency. Those metrics matter, but the hardest failures usually appear when a cached value is still fast, still well-formed, and no longer belongs to the question being asked.
+
+The cache key is the first boundary. It should include every input that changes the answer: tenant, source, date range, report type, permissions, feature flags, or freshness mode. Missing one of those values turns a performance optimization into a correctness problem.
+
+## Invalidation is a domain decision
+
+Time-to-live is not the same as invalidation. A five-minute TTL may be acceptable for a dashboard summary and completely wrong for a permission decision. A write may need to invalidate one projection, publish an event, or leave a derived value stale but clearly labeled.
+
+The right question is not “how long should we cache this?” It is “what event makes this answer untrue, and how quickly must the system reflect it?”
+
+## Make stale states visible
+
+Sometimes invalidation cannot happen immediately. That is fine if the response says so. Returning `freshness: stale` or an `updatedAt` value gives the interface and the operator a shared understanding of the trade-off.
+
+The cache should reduce waiting, not reduce trust. If the system cannot explain why a value is still being served, the cache has become hidden product behavior.

@@ -1,0 +1,20 @@
+---
+title: "Prefer boring infrastructure and interesting product"
+summary: "The exciting parts of a stack are rarely where the product creates value; dependable infrastructure gives the team room to make the product distinctive."
+date: 2026-08-29
+tag: "principle"
+relatedWriting: ["reversible-migrations", "system-boundaries-as-design"]
+readingTime: "3 min"
+---
+
+There is a particular kind of technical excitement that arrives before the product has earned it: a new queue, a new runtime, a new orchestration layer, or an abstraction that solves a future problem while introducing a current one.
+
+I prefer infrastructure that is easy to explain at the moment it fails. That usually means fewer moving parts, explicit ownership, ordinary deployment steps, and a rollback path that does not depend on everyone remembering an undocumented sequence of commands.
+
+## Boring is not the same as stagnant
+
+Boring infrastructure can still have strong engineering. It can have careful capacity limits, good observability, safe migrations, and fast feedback. The point is not to avoid improvement. The point is to spend novelty where it changes the product or removes a real constraint.
+
+When infrastructure is predictable, the team has more attention for the hard product questions: what should the user see first, which workflow deserves automation, and where should the system refuse to guess?
+
+The most interesting product work often depends on infrastructure that nobody has to discuss in every meeting.

@@ -1,0 +1,125 @@
+---
+interface NoteItem {
+  slug: string
+  title: string
+  summary: string
+  tag: string
+  date: Date
+  readingTime?: string
+}
+
+interface Props {
+  items: NoteItem[]
+}
+
+const { items } = Astro.props
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" })
+---
+
+<ul class="note-list">
+  {
+    items.map((item, index) => (
+      <li class="note-list__item" data-note-tag={item.tag}>
+        <a href={`/notes/${item.slug}`} class="note-list__link">
+          <div class="note-list__index">
+            <span class="index-num">{String(index + 1).padStart(3, "0")}</span>
+            <time datetime={item.date.toISOString()} class="mono-label">{fmt(item.date)}</time>
+          </div>
+          <div class="note-list__main">
+            <span class="note-list__tag">{item.tag}</span>
+            <h2 class="note-list__title font-serif">{item.title}</h2>
+            <p class="note-list__summary">{item.summary}</p>
+          </div>
+          <div class="note-list__aside">
+            {item.readingTime && <span class="mono-label">{item.readingTime}</span>}
+            <span class="note-list__arrow" aria-hidden="true">&#8594;</span>
+          </div>
+        </a>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .note-list {
+    border-top: var(--rule);
+  }
+  .note-list__item {
+    border-bottom: var(--rule);
+  }
+  .note-list__link {
+    display: grid;
+    grid-template-columns: 150px 1fr auto;
+    gap: clamp(1rem, 4vw, 3.5rem);
+    align-items: start;
+    padding-block: clamp(1.5rem, 3vw, 2.25rem);
+    transition: background-color 0.3s ease, padding-inline 0.3s ease;
+  }
+  .note-list__link:hover {
+    background-color: color-mix(in srgb, var(--paper-2) 70%, transparent);
+    padding-inline: clamp(0.5rem, 1.5vw, 1.25rem);
+  }
+  .note-list__index {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .note-list__tag {
+    display: inline-block;
+    width: fit-content;
+    border: var(--rule);
+    padding: 2px 8px;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: lowercase;
+  }
+  .note-list__title {
+    margin-top: 0.65rem;
+    font-size: clamp(1.5rem, 3vw, 2.3rem);
+    font-weight: 300;
+    line-height: 1.08;
+  }
+  .note-list__summary {
+    max-width: 58ch;
+    margin-top: 0.75rem;
+    color: var(--ink-70);
+  }
+  .note-list__aside {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding-top: 0.35rem;
+  }
+  .note-list__arrow {
+    font-size: 1.2rem;
+    transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+  .note-list__link:hover .note-list__arrow {
+    transform: translateX(6px);
+  }
+
+  @media (max-width: 720px) {
+    .note-list__link {
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem 1rem;
+    }
+    .note-list__index {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .note-list__main {
+      grid-column: 1;
+    }
+    .note-list__aside {
+      grid-column: 2;
+      grid-row: 2;
+      align-self: end;
+    }
+  }
+</style>

@@ -10,6 +10,11 @@ const writing = (await getCollection("writing", ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
   .slice(0, 4)
   .map((entry) => ({ slug: entry.id, ...entry.data }))
+
+const notes = (await getCollection("notes", ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+  .slice(0, 3)
+  .map((entry, index) => ({ n: String(index + 1).padStart(3, "0"), slug: entry.id, ...entry.data }))
 ---
 
 <BaseLayout
@@ -41,9 +46,9 @@ const writing = (await getCollection("writing", ({ data }) => !data.draft))
     <div class="shell">
       <div class="section-head">
         <h2>Field notes</h2>
-        <span class="mono-label">Building in public</span>
+        <a href="/notes" class="textlink">All notes <span class="arrow">&#8594;</span></a>
       </div>
-      <FieldNotes />
+      <FieldNotes items={notes} />
     </div>
   </section>
 </BaseLayout>

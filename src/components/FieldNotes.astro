@@ -1,23 +1,33 @@
 ---
-import { notes } from "@/data/notes"
+interface NoteItem {
+  n: string
+  slug: string
+  title: string
+  summary: string
+  tag: string
+  date: Date
+}
+
+interface Props {
+  items: NoteItem[]
+}
+
+const { items } = Astro.props
 ---
 
 <ul class="notes-grid">
   {
-    notes.map((note) => (
+    items.map((note) => (
       <li class="note">
         <div class="note__head">
           <span class="index-num">{note.n}</span>
           <span class="note__tag">{note.tag}</span>
         </div>
         <p class="note__body">
-          {note.href ? (
-            <a href={note.href} class="note__link">
-              {note.body}
-            </a>
-          ) : (
-            note.body
-          )}
+          <a href={`/notes/${note.slug}`} class="note__link">
+            <span class="note__title">{note.title}</span>
+            <span class="note__summary">{note.summary}</span>
+          </a>
         </p>
       </li>
     ))
@@ -72,6 +82,18 @@ import { notes } from "@/data/notes"
     font-size: 0.95rem;
     line-height: 1.55;
     color: var(--ink);
+  }
+  .note__title,
+  .note__summary {
+    display: block;
+  }
+  .note__title {
+    font-family: var(--font-serif);
+    font-size: 1.2rem;
+    line-height: 1.2;
+  }
+  .note__summary {
+    margin-top: 0.65rem;
   }
   .note__link {
     background-image: linear-gradient(var(--ink-40), var(--ink-40));

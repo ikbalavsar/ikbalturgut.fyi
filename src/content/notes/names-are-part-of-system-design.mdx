@@ -1,0 +1,24 @@
+---
+title: "Naming is part of system design"
+summary: "A system is only as clear as its worst name. Renaming is refactoring, and the cost of postponing it compounds across every boundary."
+date: 2026-09-04
+tag: "principle"
+relatedWriting: ["system-boundaries-as-design", "testing-backend-systems"]
+readingTime: "3 min"
+---
+
+The most expensive name in a codebase is often not the longest one. It is the name that sounds reasonable while hiding two different meanings.
+
+`Data`, `status`, `user`, and `config` can all be useful words. They become dangerous when they cross a boundary without saying which data, which status, which user, or which configuration they represent. A vague name forces every reader to reconstruct the missing context from the call site, the database, and the history of the feature.
+
+## Names carry invariants
+
+`publishedAt` tells me more than `date`. `tenantId` tells me more than `account`. `freshnessState` tells me more than `status`. The longer name is not ceremony; it carries a rule about what the value means and how it should be used.
+
+This is especially important at API and data boundaries. A name that is acceptable inside a small function may be too ambiguous in an event payload or shared contract. The farther a value travels, the more context the name needs to carry with it.
+
+## Renaming is a safe change when it is deliberate
+
+Renaming is sometimes postponed because it looks cosmetic. In practice, a clear rename can remove more risk than a large refactor. It makes tests easier to read, narrows autocomplete suggestions, improves logs, and gives future changes a more honest starting point.
+
+The useful question is not “can we rename this later?” It is “how many decisions will be made using the wrong name before later arrives?”

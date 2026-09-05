@@ -1,0 +1,24 @@
+---
+title: "Streaming rows changed the way the table was read"
+summary: "Replacing pagination with streamed rows was not only a speed experiment; it changed how people scanned, paused, and trusted the data table."
+date: 2026-09-02
+tag: "experiment"
+relatedWriting: ["dashboard-performance", "clickhouse-real-time-analytics"]
+readingTime: "4 min"
+---
+
+A data table can be technically fast and still feel slow. If the interface waits for every row before showing anything, the user experiences one large pause. If it renders partial content without stable structure, the user experiences movement and uncertainty instead.
+
+I experimented with streaming rows instead of treating pagination as the only delivery model. The interesting result was not just that the first rows appeared earlier. The reading pattern changed. People could begin scanning the top of the result while the rest of the dataset was still arriving.
+
+## Streaming changes the interaction contract
+
+Once rows arrive progressively, the interface has to communicate what is complete and what is still in flight. Sorting, filtering, selection, and export cannot pretend that the visible rows are necessarily the full result. The API needs a clear state for partial delivery, completion, cancellation, and failure.
+
+That makes streaming a product decision, not merely a transport optimization. It is valuable when early rows are useful and the user can act without waiting for the entire result. It is less useful when the answer is only meaningful after aggregation or when ordering can change as late data arrives.
+
+## Measure reading time, not only response time
+
+For this kind of change, time-to-first-row matters, but it is not enough. I would also measure time-to-first-useful-action, completion rate, cancellation rate, and whether users restart the query because the partial state was confusing.
+
+The best performance improvement is the one that changes what people can do sooner while preserving a truthful understanding of the data.
